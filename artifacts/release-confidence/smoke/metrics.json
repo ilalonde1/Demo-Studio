@@ -1,0 +1,37 @@
+{
+  "StartedUtc": "2026-03-08T21:46:19.3830531+00:00",
+  "CompletedUtc": "2026-03-08T21:46:23.0847664+00:00",
+  "Iterations": 1,
+  "Passed": 1,
+  "Failed": 0,
+  "TotalMs": 3673.2176,
+  "MeanIterationMs": 3414.4916,
+  "MeanStartHandshakeMs": 303.7665,
+  "MeanStopMs": 108.0193,
+  "MaxWorkingSetMb": 28.3125,
+  "MaxPrivateMb": 9.859375,
+  "MaxHandleCount": 257,
+  "AnyFfmpegLeftover": false,
+  "TrendStartIteration": 10,
+  "WorkingSetSlopeMbPerIteration": 0,
+  "PrivateSlopeMbPerIteration": 0,
+  "HandleSlopePerIteration": 0,
+  "SlopeThresholdBreaches": [],
+  "Results": [
+    {
+      "Iteration": 1,
+      "StartedUtc": "2026-03-08T21:46:19.4097129+00:00",
+      "Status": "Passed",
+      "Error": null,
+      "StartHandshakeMs": 303.7665,
+      "CaptureSeconds": 3,
+      "StopMs": 108.0193,
+      "TotalMs": 3414.4916,
+      "FileSizeBytes": 105053,
+      "WorkingSetMb": 28.3125,
+      "PrivateMb": 9.859375,
+      "HandleCount": 257,
+      "FfmpegProcessCountAfter": 0
+    }
+  ]
+}

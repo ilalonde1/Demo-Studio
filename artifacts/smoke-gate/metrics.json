@@ -1,0 +1,9 @@
+{
+  "StartedUtc": "2026-03-07T01:17:23.1562732+00:00",
+  "OutputPath": "C:\\VIsual Studio Projects\\App Demo Maker\\artifacts\\smoke-gate\\20260307_011723_ff9e1e8670e4430e951b626f2c41e416\\smoke-ff9e1e86-70e4-430e-951b-626f2c41e416.mp4",
+  "StartHandshakeMs": 301.755,
+  "CaptureSeconds": 3,
+  "StopMs": 107.3585,
+  "TotalMs": 3422.7395,
+  "FileSizeBytes": 112528
+}

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableFlaUIRunner Condition="'$(EnableFlaUIRunner)' == ''">true</EnableFlaUIRunner>
+    <DefineConstants Condition="'$(EnableFlaUIRunner)' == 'true'">$(DefineConstants);FLAUI_RUNNER_ENABLED</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnableFlaUIRunner)' == 'true'">
+    <PackageReference Include="FlaUI.Core" Version="4.0.0" />
+    <PackageReference Include="FlaUI.UIA3" Version="4.0.0" />
+  </ItemGroup>
+
+</Project>
