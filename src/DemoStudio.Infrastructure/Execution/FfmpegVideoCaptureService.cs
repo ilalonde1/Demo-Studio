@@ -164,14 +164,24 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
             return string.Empty;
         }
 
-        var flattened = execution.StdErr
+        var lines = execution.StdErr
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static line => !line.StartsWith("ffmpeg version", StringComparison.OrdinalIgnoreCase))
+            .Where(static line => !line.StartsWith("built with", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        var raw = lines.Length == 0
+            ? execution.StdErr.Trim()
+            : string.Join(" | ", lines.TakeLast(4));
+
+        var flattened = raw
             .Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal)
             .Trim();
 
         if (flattened.Length > 260)
         {
-            flattened = flattened[..260];
+            flattened = flattened[^260..];
         }
 
         return string.IsNullOrWhiteSpace(flattened) ? string.Empty : $"ffmpeg: {flattened}";
@@ -245,19 +255,8 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
                 throw new InvalidOperationException("Resolved window capture bounds are invalid.");
             }
 
-            // gdigrab offsets are relative to desktop capture origin; normalize to desktop bounds.
-            var normalizedBounds = new WindowBounds(
-                captureBounds.X - desktopBounds.X,
-                captureBounds.Y - desktopBounds.Y,
-                captureBounds.Width,
-                captureBounds.Height);
-            if (!normalizedBounds.IsValid)
-            {
-                throw new InvalidOperationException("Normalized window capture bounds are invalid.");
-            }
-
             return (
-                FfmpegCommandBuilder.BuildWindowCaptureArguments(_options, normalizedBounds, rawVideoPath),
+                FfmpegCommandBuilder.BuildWindowCaptureArguments(_options, captureBounds, rawVideoPath),
                 "Window",
                 locateResult.Title,
                 locateResult.ProcessId,

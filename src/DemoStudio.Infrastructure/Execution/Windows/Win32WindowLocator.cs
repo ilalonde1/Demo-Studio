@@ -36,10 +36,14 @@ internal sealed class Win32WindowLocator : IWindowLocator
 
             if (exact is not null)
             {
-                _logger.LogWarning(
-                    "Exact handle {Handle} was found but is not a primary capture candidate. Falling back to process/title matching.",
-                    request.HandleHex);
+                var reason = $"Exact window handle {request.HandleHex} is no longer capturable (minimized, cloaked, hidden, or invalid bounds).";
+                _logger.LogWarning(reason);
+                return Task.FromResult(new WindowLocatorResult(false, IntPtr.Zero, string.Empty, 0, reason, null, desktopBounds));
             }
+
+            var notFoundReason = $"Exact window handle {request.HandleHex} was not found.";
+            _logger.LogWarning(notFoundReason);
+            return Task.FromResult(new WindowLocatorResult(false, IntPtr.Zero, string.Empty, 0, notFoundReason, null, desktopBounds));
         }
 
         var filtered = windows
@@ -77,10 +81,9 @@ internal sealed class Win32WindowLocator : IWindowLocator
             filtered = filtered.Where(x => x.Handle == handle).ToArray();
             if (filtered.Length == 0 && preHandleFiltered.Length > 0)
             {
-                _logger.LogWarning(
-                    "Exact handle {Handle} not found. Falling back to title/process match for window selection.",
-                    request.HandleHex);
-                filtered = preHandleFiltered;
+                var reason = $"Exact window handle {request.HandleHex} was not found among capturable windows.";
+                _logger.LogWarning(reason);
+                return Task.FromResult(new WindowLocatorResult(false, IntPtr.Zero, string.Empty, 0, reason, null, desktopBounds));
             }
         }
 

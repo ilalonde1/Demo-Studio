@@ -26,6 +26,24 @@ var trendStartAt = GetInt(argsMap, "--trend-start", Math.Max(10, iterations / 5)
 var maxWorkingSetSlopeMbPerIteration = GetDouble(argsMap, "--max-working-set-slope", 0.05d, 0d, 10d);
 var maxPrivateSlopeMbPerIteration = GetDouble(argsMap, "--max-private-slope", 0.03d, 0d, 10d);
 var maxHandleSlopePerIteration = GetDouble(argsMap, "--max-handle-slope", 0.5d, 0d, 500d);
+var captureMode = argsMap.TryGetValue("--mode", out var modeArg) && modeArg.Equals("Window", StringComparison.OrdinalIgnoreCase)
+    ? "Window"
+    : "Desktop";
+var windowTitleContains = argsMap.TryGetValue("--window-title", out var windowTitleArg) && !string.IsNullOrWhiteSpace(windowTitleArg)
+    ? windowTitleArg.Trim()
+    : null;
+var windowProcessName = argsMap.TryGetValue("--window-process", out var windowProcessArg) && !string.IsNullOrWhiteSpace(windowProcessArg)
+    ? windowProcessArg.Trim()
+    : null;
+var windowHandleHex = argsMap.TryGetValue("--window-handle", out var windowHandleArg) && !string.IsNullOrWhiteSpace(windowHandleArg)
+    ? windowHandleArg.Trim()
+    : null;
+var preferExactHandle = argsMap.TryGetValue("--prefer-exact-handle", out var preferHandleArg) && bool.TryParse(preferHandleArg, out var parsedPreferHandle)
+    ? parsedPreferHandle
+    : true;
+var fallbackToDesktop = argsMap.TryGetValue("--fallback-to-desktop", out var fallbackArg) && bool.TryParse(fallbackArg, out var parsedFallback)
+    ? parsedFallback
+    : false;
 var outputRoot = argsMap.TryGetValue("--output", out var outputArg) && !string.IsNullOrWhiteSpace(outputArg)
     ? Path.GetFullPath(outputArg)
     : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop", "smoke");
@@ -51,8 +69,12 @@ var options = new FfmpegCaptureOptions
     Preset = "veryfast",
     Crf = 23,
     MaxDurationSeconds = Math.Max(seconds + 15, 30),
-    CaptureMode = "Desktop",
-    FallbackToDesktop = true,
+    CaptureMode = captureMode,
+    WindowTitleContains = windowTitleContains,
+    WindowProcessName = windowProcessName,
+    WindowHandleHex = windowHandleHex,
+    PreferExactHandle = preferExactHandle,
+    FallbackToDesktop = fallbackToDesktop,
     CropEnabled = false,
     HighlightCursor = false,
     OutputFileExtension = ".mp4"
@@ -61,14 +83,22 @@ var options = new FfmpegCaptureOptions
 var captureService = new FfmpegVideoCaptureService(
     new ProcessLauncher(),
     new LocalFileStorage(soakDirectory),
-    new NullWindowLocator(),
+    WindowLocatorFactory.CreateDefault(),
     Options.Create(options),
     NullLogger<FfmpegVideoCaptureService>.Instance);
 
 var runMetrics = new List<SmokeIterationMetrics>(iterations);
 var overallStopwatch = Stopwatch.StartNew();
 
-Console.WriteLine($"[soak] Starting soak: iterations={iterations}, captureSeconds={seconds}, intervalMs={intervalMs}, startupRetries={startupRetries}, trendStart={trendStartAt}, output={soakDirectory}");
+Console.WriteLine(
+    $"[soak] Starting soak: mode={captureMode}, iterations={iterations}, captureSeconds={seconds}, intervalMs={intervalMs}, " +
+    $"startupRetries={startupRetries}, trendStart={trendStartAt}, output={soakDirectory}");
+if (captureMode.Equals("Window", StringComparison.OrdinalIgnoreCase))
+{
+    Console.WriteLine(
+        $"[soak] Window selector: title='{windowTitleContains ?? "-"}' process='{windowProcessName ?? "-"}' " +
+        $"handle='{windowHandleHex ?? "-"}' preferExactHandle={preferExactHandle} fallbackToDesktop={fallbackToDesktop}");
+}
 
 for (var iteration = 1; iteration <= iterations; iteration++)
 {
@@ -121,7 +151,13 @@ for (var iteration = 1; iteration <= iterations; iteration++)
                 break;
             }
 
-            await captureService.StopAsync(new CaptureStopRequest(run, effectiveRawPath));
+            var startupStop = await captureService.StopAsync(new CaptureStopRequest(run, effectiveRawPath));
+            if (!startupStop.Succeeded && startupAttempt >= startupAttempts)
+            {
+                status = "StartFailed";
+                error = startupStop.ErrorMessage ?? "Capture startup stop failed.";
+            }
+
             if (startupAttempt < startupAttempts)
             {
                 await Task.Delay(350);
@@ -131,8 +167,12 @@ for (var iteration = 1; iteration <= iterations; iteration++)
 
         if (!startupSucceeded || string.IsNullOrWhiteSpace(effectiveRawPath))
         {
-            status = "HandshakeTimeout";
-            error = "Output file did not start writing within timeout.";
+            if (string.IsNullOrWhiteSpace(error))
+            {
+                status = "HandshakeTimeout";
+                error = "Output file did not start writing within timeout.";
+            }
+
             throw new TimeoutException(error);
         }
 
@@ -398,21 +438,6 @@ static async Task<bool> WaitForNonZeroFileAsync(string path, TimeSpan timeout)
     }
 
     return false;
-}
-
-file sealed class NullWindowLocator : IWindowLocator
-{
-    public Task<WindowLocatorResult> FindAsync(WindowLocatorRequest request, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(new WindowLocatorResult(
-            Found: false,
-            Handle: IntPtr.Zero,
-            Title: string.Empty,
-            ProcessId: 0,
-            FailureReason: "Smoke runner uses desktop capture mode; window locator is not used.",
-            Bounds: null,
-            DesktopBounds: null));
-    }
 }
 
 internal sealed record SmokeIterationMetrics(
