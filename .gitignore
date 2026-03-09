@@ -9,3 +9,4 @@ obj/
 node_modules/
 appsettings.Development.json
 .artifacts/
+artifacts/release-confidence/smoke/soak_*/
