@@ -76,6 +76,8 @@ public sealed class DesktopCaptureRuntime
         string outputDirectory;
         string rawVideoPath;
         IVideoCaptureService captureService;
+        var effectiveTargetSettings = targetSettings;
+        var desktopFallbackAttempted = false;
 
         lock (_sync)
         {
@@ -94,16 +96,18 @@ public sealed class DesktopCaptureRuntime
             _activeRun = run;
             _activeRawPath = rawVideoPath;
 
-            captureService = BuildCaptureService(targetSettings);
+            captureService = BuildCaptureService(effectiveTargetSettings);
             _activeCaptureService = captureService;
         }
 
         string? effectiveRawPath = null;
         CaptureRuntimeResult startupHealthy = CaptureRuntimeResult.Failure("Capture startup verification failed.");
         var startFailureMessage = "Capture start failed.";
+        var attempt = 0;
 
-        for (var attempt = 1; attempt <= StartupAttempts; attempt++)
+        while (true)
         {
+            attempt++;
             var start = await captureService.StartAsync(new CaptureStartRequest(run, outputDirectory, rawVideoPath), cancellationToken);
             if (!start.Succeeded)
             {
@@ -111,6 +115,27 @@ public sealed class DesktopCaptureRuntime
                 if (attempt < StartupAttempts)
                 {
                     await Task.Delay(350, cancellationToken);
+                    continue;
+                }
+
+                if (!desktopFallbackAttempted
+                    && effectiveTargetSettings.FallbackToDesktop
+                    && string.Equals(effectiveTargetSettings.Mode, "Window", StringComparison.OrdinalIgnoreCase))
+                {
+                    desktopFallbackAttempted = true;
+                    attempt = 0;
+                    effectiveTargetSettings = new CaptureTargetSettings(
+                        Mode: "Desktop",
+                        WindowTitleContains: null,
+                        WindowProcessName: null,
+                        WindowHandleHex: null,
+                        FallbackToDesktop: false);
+                    captureService = BuildCaptureService(effectiveTargetSettings);
+                    lock (_sync)
+                    {
+                        _activeCaptureService = captureService;
+                    }
+
                     continue;
                 }
 
@@ -135,6 +160,30 @@ public sealed class DesktopCaptureRuntime
             if (attempt < StartupAttempts)
             {
                 await Task.Delay(350, cancellationToken);
+                continue;
+            }
+
+            if (!desktopFallbackAttempted
+                && effectiveTargetSettings.FallbackToDesktop
+                && string.Equals(effectiveTargetSettings.Mode, "Window", StringComparison.OrdinalIgnoreCase))
+            {
+                desktopFallbackAttempted = true;
+                attempt = 0;
+                effectiveTargetSettings = new CaptureTargetSettings(
+                    Mode: "Desktop",
+                    WindowTitleContains: null,
+                    WindowProcessName: null,
+                    WindowHandleHex: null,
+                    FallbackToDesktop: false);
+                captureService = BuildCaptureService(effectiveTargetSettings);
+                lock (_sync)
+                {
+                    _activeCaptureService = captureService;
+                }
+            }
+            else
+            {
+                break;
             }
         }
 
@@ -214,6 +263,7 @@ public sealed class DesktopCaptureRuntime
             return CaptureRuntimeResult.Failure("Capture startup failed: raw output path is empty.");
         }
 
+        var fileObservedCount = 0;
         var deadline = DateTimeOffset.UtcNow + StartupProbeTimeout;
         while (DateTimeOffset.UtcNow <= deadline)
         {
@@ -221,6 +271,16 @@ public sealed class DesktopCaptureRuntime
             if (TryGetFileLength(rawVideoPath, out var length) && length > 0)
             {
                 return CaptureRuntimeResult.Success(rawVideoPath, null);
+            }
+
+            if (File.Exists(rawVideoPath))
+            {
+                fileObservedCount++;
+                if (fileObservedCount >= 2)
+                {
+                    // Some ffmpeg/mp4 pipelines keep size at 0 briefly while startup is healthy.
+                    return CaptureRuntimeResult.Success(rawVideoPath, null);
+                }
             }
 
             await Task.Delay(StartupProbeInterval, cancellationToken);

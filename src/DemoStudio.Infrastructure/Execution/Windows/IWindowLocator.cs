@@ -31,6 +31,7 @@ internal sealed record Win32WindowRecord(
     string Title,
     bool IsVisible,
     bool IsMinimized,
+    bool IsCloaked,
     int ProcessId,
     string ProcessName,
     WindowBounds Bounds);

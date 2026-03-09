@@ -11,21 +11,40 @@ public sealed class DesktopWindowCatalogService
         var windows = new List<DesktopWindowCandidate>();
         EnumWindows((hwnd, lParam) =>
         {
-            if (hwnd == IntPtr.Zero || !IsWindowVisible(hwnd) || IsIconic(hwnd))
+            if (hwnd == IntPtr.Zero)
             {
                 return true;
             }
 
-            var title = GetWindowTitle(hwnd).Trim();
-            if (string.IsNullOrWhiteSpace(title))
-            {
-                return true;
-            }
+            var isVisible = IsWindowVisible(hwnd);
+            var isMinimized = IsIconic(hwnd);
+            var isCloaked = IsCloaked(hwnd);
 
             GetWindowThreadProcessId(hwnd, out var processId);
             var processName = GetProcessName(processId);
+            var title = GetWindowTitle(hwnd).Trim();
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                if (!IsBrowserProcess(processName))
+                {
+                    return true;
+                }
+
+                title = BuildFallbackTitle(processName, (int)processId, hwnd);
+            }
+
             var bounds = GetBounds(hwnd);
             if (!bounds.IsValid)
+            {
+                return true;
+            }
+
+            var hasLargeBounds = bounds.Width >= 320 && bounds.Height >= 180;
+            var include = !isMinimized
+                && !isCloaked
+                && hasLargeBounds
+                && (isVisible || IsBrowserProcess(processName));
+            if (!include)
             {
                 return true;
             }
@@ -62,6 +81,12 @@ public sealed class DesktopWindowCatalogService
         if (string.IsNullOrWhiteSpace(process))
         {
             return true;
+        }
+
+        // Never suppress mainstream browser targets from the picker.
+        if (IsBrowserProcess(process))
+        {
+            return false;
         }
 
         if (process.Equals("TextInputHost", StringComparison.OrdinalIgnoreCase) ||
@@ -106,17 +131,38 @@ public sealed class DesktopWindowCatalogService
         return false;
     }
 
+    private static bool IsBrowserProcess(string processName)
+    {
+        return processName.Equals("msedge", StringComparison.OrdinalIgnoreCase)
+            || processName.Equals("chrome", StringComparison.OrdinalIgnoreCase)
+            || processName.Equals("firefox", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildFallbackTitle(string processName, int processId, IntPtr handle)
+    {
+        var app = string.IsNullOrWhiteSpace(processName) ? "Window" : processName;
+        return $"{app} [{processId}] 0x{handle.ToInt64():X}";
+    }
+
     private static string GetWindowTitle(IntPtr hwnd)
     {
         var length = GetWindowTextLength(hwnd);
-        if (length <= 0)
-        {
-            return string.Empty;
-        }
-
-        var buffer = new StringBuilder(length + 1);
+        var capacity = Math.Max(length + 1, 1024);
+        var buffer = new StringBuilder(capacity);
         _ = GetWindowText(hwnd, buffer, buffer.Capacity);
         return buffer.ToString();
+    }
+
+    private static bool IsCloaked(IntPtr hwnd)
+    {
+        const int dwmwaCloaked = 14;
+        int cloaked;
+        if (DwmGetWindowAttributeInt(hwnd, dwmwaCloaked, out cloaked, sizeof(int)) != 0)
+        {
+            return false;
+        }
+
+        return cloaked != 0;
     }
 
     private static string GetProcessName(uint processId)
@@ -138,7 +184,8 @@ public sealed class DesktopWindowCatalogService
             return default;
         }
 
-        if (DwmGetWindowAttribute(hwnd, 9, out var rect, Marshal.SizeOf<RECT>()) == 0)
+        RECT rect;
+        if (DwmGetWindowAttributeRect(hwnd, 9, out rect, Marshal.SizeOf<RECT>()) == 0)
         {
             return new WindowBounds(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
         }
@@ -174,8 +221,11 @@ public sealed class DesktopWindowCatalogService
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    private static extern int DwmGetWindowAttributeRect(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    private static extern int DwmGetWindowAttributeInt(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT

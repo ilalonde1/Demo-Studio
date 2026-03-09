@@ -86,13 +86,16 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
             try
             {
                 var current = targetSettingsProvider();
+                var preferExactHandle = !string.IsNullOrWhiteSpace(current.WindowHandleHex);
+                var titleForLookup = preferExactHandle ? null : current.WindowTitleContains;
+                var processForLookup = current.WindowProcessName;
                 var locate = await _windowLocator.FindAsync(
                     new WindowLocatorRequest(
-                        current.WindowTitleContains,
+                        titleForLookup,
                         TitleRegex: null,
-                        current.WindowProcessName,
+                        processForLookup,
                         current.WindowHandleHex,
-                        PreferExactHandle: !string.IsNullOrWhiteSpace(current.WindowHandleHex)),
+                        PreferExactHandle: preferExactHandle),
                     cancellationToken);
 
                 if (locate.Found)
@@ -104,9 +107,9 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
                 {
                     var reacquire = await _windowLocator.FindAsync(
                         new WindowLocatorRequest(
-                            current.WindowTitleContains,
+                            TitleContains: null,
                             TitleRegex: null,
-                            current.WindowProcessName,
+                            ProcessName: current.WindowProcessName,
                             HandleHex: null,
                             PreferExactHandle: false),
                         cancellationToken);

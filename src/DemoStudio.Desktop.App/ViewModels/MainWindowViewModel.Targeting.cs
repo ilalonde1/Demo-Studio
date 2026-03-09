@@ -19,15 +19,6 @@ public sealed partial class MainWindowViewModel
         }
 
         var selected = SelectedWindowCandidate;
-        var alreadyLocked =
-            string.Equals(WindowHandleHex?.Trim(), selected.HandleHex?.Trim(), StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(WindowProcessName?.Trim(), selected.ProcessName?.Trim(), StringComparison.OrdinalIgnoreCase);
-
-        if (alreadyLocked)
-        {
-            return;
-        }
-
         WindowTitleContains = selected.Title ?? string.Empty;
         WindowProcessName = selected.ProcessName ?? string.Empty;
         WindowHandleHex = selected.HandleHex ?? string.Empty;
@@ -102,6 +93,7 @@ public sealed partial class MainWindowViewModel
 
         try
         {
+            EnsureWindowTargetLockedFromSelection();
             var result = await _windowFocusService.TryActivateAsync(BuildTargetSettings());
             _lastRuntimeMessage = result.Message;
             OnPropertyChanged(nameof(LastRuntimeMessage));

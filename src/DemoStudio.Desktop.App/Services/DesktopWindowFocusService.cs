@@ -15,13 +15,16 @@ public sealed class DesktopWindowFocusService
             return (true, "Desktop mode selected; no target focus needed.");
         }
 
+        var preferExactHandle = !string.IsNullOrWhiteSpace(settings.WindowHandleHex);
+        var titleForLookup = preferExactHandle ? null : settings.WindowTitleContains;
+        var processForLookup = settings.WindowProcessName;
         var locate = await _windowLocator.FindAsync(
             new DemoStudio.Infrastructure.Execution.Windows.WindowLocatorRequest(
-                settings.WindowTitleContains,
+                titleForLookup,
                 TitleRegex: null,
-                settings.WindowProcessName,
+                processForLookup,
                 settings.WindowHandleHex,
-                PreferExactHandle: !string.IsNullOrWhiteSpace(settings.WindowHandleHex)),
+                PreferExactHandle: preferExactHandle),
             cancellationToken);
 
         if (!locate.Found || locate.Handle == IntPtr.Zero)

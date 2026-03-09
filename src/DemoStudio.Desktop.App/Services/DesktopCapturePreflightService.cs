@@ -83,13 +83,16 @@ public sealed class DesktopCapturePreflightService
         }
 
         var locator = new DesktopWindowLocator();
+        var preferExactHandle = !string.IsNullOrWhiteSpace(targetSettings.WindowHandleHex);
+        var titleForLookup = preferExactHandle ? null : targetSettings.WindowTitleContains;
+        var processForLookup = targetSettings.WindowProcessName;
         var locate = await locator.FindAsync(
             new WindowLocatorRequest(
-                targetSettings.WindowTitleContains,
+                titleForLookup,
                 TitleRegex: null,
-                targetSettings.WindowProcessName,
+                processForLookup,
                 targetSettings.WindowHandleHex,
-                PreferExactHandle: !string.IsNullOrWhiteSpace(targetSettings.WindowHandleHex)),
+                PreferExactHandle: preferExactHandle),
             cancellationToken);
 
         if (locate.Found)
@@ -112,15 +115,18 @@ public sealed class DesktopCapturePreflightService
         CancellationToken cancellationToken)
     {
         IntPtr? baselineHandle = null;
+        var preferExactHandle = !string.IsNullOrWhiteSpace(targetSettings.WindowHandleHex);
+        var titleForLookup = preferExactHandle ? null : targetSettings.WindowTitleContains;
+        var processForLookup = targetSettings.WindowProcessName;
         for (var i = 0; i < 3; i++)
         {
             var result = await locator.FindAsync(
                     new WindowLocatorRequest(
-                        targetSettings.WindowTitleContains,
+                        titleForLookup,
                         TitleRegex: null,
-                        targetSettings.WindowProcessName,
+                        processForLookup,
                         targetSettings.WindowHandleHex,
-                        PreferExactHandle: !string.IsNullOrWhiteSpace(targetSettings.WindowHandleHex)),
+                        PreferExactHandle: preferExactHandle),
                     cancellationToken);
 
             if (!result.Found)

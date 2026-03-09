@@ -28,13 +28,14 @@ internal sealed class Win32WindowEnumerator : IWin32WindowEnumerator
 
             var isVisible = IsWindowVisible(hwnd);
             var isMinimized = IsIconic(hwnd);
+            var isCloaked = IsCloaked(hwnd);
 
             var title = GetWindowTitle(hwnd);
             GetWindowThreadProcessId(hwnd, out var pid);
             var processName = GetProcessName(pid);
             var bounds = GetBounds(hwnd);
 
-            windows.Add(new Win32WindowRecord(hwnd, title, isVisible, isMinimized, (int)pid, processName, bounds));
+            windows.Add(new Win32WindowRecord(hwnd, title, isVisible, isMinimized, isCloaked, (int)pid, processName, bounds));
             return true;
         }, IntPtr.Zero);
 
@@ -62,7 +63,8 @@ internal sealed class Win32WindowEnumerator : IWin32WindowEnumerator
             return default;
         }
 
-        if (DwmGetWindowAttribute(hwnd, 9, out var rect, Marshal.SizeOf<RECT>()) == 0)
+        RECT rect;
+        if (DwmGetWindowAttributeRect(hwnd, 9, out rect, Marshal.SizeOf<RECT>()) == 0)
         {
             var width = rect.Right - rect.Left;
             var height = rect.Bottom - rect.Top;
@@ -93,14 +95,27 @@ internal sealed class Win32WindowEnumerator : IWin32WindowEnumerator
     private static string GetWindowTitle(IntPtr hwnd)
     {
         var length = GetWindowTextLength(hwnd);
-        if (length <= 0)
-        {
-            return string.Empty;
-        }
-
-        var buffer = new StringBuilder(length + 1);
+        var capacity = Math.Max(length + 1, 1024);
+        var buffer = new StringBuilder(capacity);
         _ = GetWindowText(hwnd, buffer, buffer.Capacity);
         return buffer.ToString();
+    }
+
+    private static bool IsCloaked(IntPtr hwnd)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        const int dwmwaCloaked = 14;
+        int cloaked;
+        if (DwmGetWindowAttributeInt(hwnd, dwmwaCloaked, out cloaked, sizeof(int)) != 0)
+        {
+            return false;
+        }
+
+        return cloaked != 0;
     }
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
@@ -126,8 +141,11 @@ internal sealed class Win32WindowEnumerator : IWin32WindowEnumerator
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    private static extern int DwmGetWindowAttributeRect(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    private static extern int DwmGetWindowAttributeInt(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);

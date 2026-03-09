@@ -9,6 +9,8 @@ namespace DemoStudio.Desktop.App.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
+    private static readonly TimeSpan CaptureStartupTimeout = TimeSpan.FromSeconds(30);
+
     private async Task StartClipAsync()
     {
         var stopwatch = Stopwatch.StartNew();
@@ -20,6 +22,13 @@ public sealed partial class MainWindowViewModel
         SetBusy(true);
         try
         {
+            _startCancellationRequested = false;
+            using var startFlowCts = CancellationTokenSource.CreateLinkedTokenSource(_lifecycleCancellation.Token);
+            _startClipCancellation = startFlowCts;
+            _startClipInFlight = true;
+            OnPropertyChanged(nameof(CanStopSession));
+            RaiseCommandState();
+
             if (_snapshot.State == RecorderSessionState.Armed)
             {
                 CurrentSessionClips.Clear();
@@ -49,7 +58,7 @@ public sealed partial class MainWindowViewModel
                     {
                         _lastRuntimeMessage = "Presenter View: moved target to secondary monitor.";
                         OnPropertyChanged(nameof(LastRuntimeMessage));
-                        await Task.Delay(200, _lifecycleCancellation.Token);
+                        await Task.Delay(200, startFlowCts.Token);
                     }
 
                     var focus = await _windowFocusService.TryActivateAsync(targetSettings);
@@ -60,15 +69,17 @@ public sealed partial class MainWindowViewModel
                         return;
                     }
 
-                    await Task.Delay(250, _lifecycleCancellation.Token);
+                    await Task.Delay(250, startFlowCts.Token);
                 }
 
-                if (!await RunStartCountdownAsync(3, _lifecycleCancellation.Token))
+                if (!await RunStartCountdownAsync(3, startFlowCts.Token))
                 {
                     return;
                 }
 
-                var captureStart = await _captureRuntime.EnsureStartedAsync(targetSettings);
+                using var startupCts = CancellationTokenSource.CreateLinkedTokenSource(startFlowCts.Token);
+                startupCts.CancelAfter(CaptureStartupTimeout);
+                var captureStart = await _captureRuntime.EnsureStartedAsync(targetSettings, startupCts.Token);
                 if (!captureStart.Succeeded)
                 {
                     EndLiveClipTracking();
@@ -106,6 +117,29 @@ public sealed partial class MainWindowViewModel
             // Shutdown/dispose cancellation: exit without mutating session state to failed.
             return;
         }
+        catch (OperationCanceledException)
+        {
+            if (_startCancellationRequested)
+            {
+                _lastRuntimeMessage = "Recording start cancelled.";
+                OnPropertyChanged(nameof(LastRuntimeMessage));
+                return;
+            }
+
+            EndLiveClipTracking();
+            _snapshot = _sessionEngine.StopFailed(
+                BuildFailureReason(
+                    "DS-DESK-START-003",
+                    $"Capture startup timed out after {CaptureStartupTimeout.TotalSeconds:0}s.",
+                    null));
+            _lastRuntimeMessage = _snapshot.FailureReason ?? "Capture startup timed out.";
+            await PersistFinalizedSessionToHistoryAsync(_snapshot, null);
+            await RefreshSessionHistoryAsync();
+            await ClearDraftStateAsync();
+            _snapshot = _sessionEngine.Reset();
+            _lastRuntimeMessage += " Session reset. Retry after confirming target window is active.";
+            RaiseWorkflowAndClipState();
+        }
         catch (Exception ex)
         {
             EndLiveClipTracking();
@@ -120,6 +154,10 @@ public sealed partial class MainWindowViewModel
         }
         finally
         {
+            _startClipInFlight = false;
+            _startCancellationRequested = false;
+            _startClipCancellation = null;
+            OnPropertyChanged(nameof(CanStopSession));
             SetBusy(false);
             RecordOperationMetric("StartClip", stopwatch.Elapsed);
         }
@@ -178,6 +216,15 @@ public sealed partial class MainWindowViewModel
         var stopwatch = Stopwatch.StartNew();
         if (!CanStopSession)
         {
+            return;
+        }
+
+        if (_startClipInFlight)
+        {
+            _startCancellationRequested = true;
+            _startClipCancellation?.Cancel();
+            _lastRuntimeMessage = "Cancelling recording start...";
+            OnPropertyChanged(nameof(LastRuntimeMessage));
             return;
         }
 

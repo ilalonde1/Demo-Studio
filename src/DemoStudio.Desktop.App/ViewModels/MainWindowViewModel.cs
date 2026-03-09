@@ -49,6 +49,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private RecorderSessionSnapshot _snapshot;
     private bool _isBusy;
+    private bool _startClipInFlight;
+    private bool _startCancellationRequested;
+    private CancellationTokenSource? _startClipCancellation;
 
     private string _lastRuntimeMessage = "Ready";
 
@@ -668,6 +671,10 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         set
         {
             _targeting.SelectedWindowCandidate = value;
+            if (CanEditTargetSettings && value is not null)
+            {
+                EnsureWindowTargetLockedFromSelection();
+            }
         }
     }
 
@@ -991,7 +998,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 
     public bool CanPauseClip => !_isBusy && _snapshot.State == RecorderSessionState.Recording;
 
-    public bool CanStopSession => !_isBusy && _snapshot.State is RecorderSessionState.Armed or RecorderSessionState.Recording or RecorderSessionState.Paused;
+    public bool CanStopSession
+        => _startClipInFlight
+            || (!_isBusy && _snapshot.State is RecorderSessionState.Armed or RecorderSessionState.Recording or RecorderSessionState.Paused);
 
     public string Step1Background => _workflow.Step1Background;
     public string Step2Background => _workflow.Step2Background;

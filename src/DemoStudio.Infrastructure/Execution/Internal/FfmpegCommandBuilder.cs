@@ -35,8 +35,10 @@ internal static class FfmpegCommandBuilder
             throw new InvalidOperationException("Window bounds are invalid.");
         }
 
-        var filterChain = BuildFilterChain(options, bounds);
-        return BuildDesktopBase(options, outputPath, filterChain, null);
+        var filterChain = options.HighlightCursor
+            ? "drawbox=x=mouse_x-10:y=mouse_y-10:w=20:h=20:color=yellow@0.6:t=fill"
+            : null;
+        return BuildDesktopBase(options, outputPath, filterChain, bounds);
     }
 
     private static string BuildDesktopBase(FfmpegCaptureOptions options, string outputPath, string? filterChain, WindowBounds? captureBounds)

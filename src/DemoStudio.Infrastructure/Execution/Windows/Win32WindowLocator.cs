@@ -29,13 +29,22 @@ internal sealed class Win32WindowLocator : IWindowLocator
         if (request.PreferExactHandle && TryParseHandle(request.HandleHex, out var exactHandle))
         {
             var exact = windows.FirstOrDefault(x => x.Handle == exactHandle);
-            if (exact is not null)
+            if (exact is not null && IsPrimaryCandidate(exact))
             {
                 return Task.FromResult(ToResult(exact, desktopBounds));
             }
+
+            if (exact is not null)
+            {
+                _logger.LogWarning(
+                    "Exact handle {Handle} was found but is not a primary capture candidate. Falling back to process/title matching.",
+                    request.HandleHex);
+            }
         }
 
-        var filtered = windows.Where(x => x.IsVisible && !x.IsMinimized).ToArray();
+        var filtered = windows
+            .Where(IsPrimaryCandidate)
+            .ToArray();
 
         if (!string.IsNullOrWhiteSpace(request.ProcessName))
         {
@@ -125,6 +134,31 @@ internal sealed class Win32WindowLocator : IWindowLocator
             .OrderBy(x => x.Title.Length)
             .ThenBy(x => x.ProcessId)
             .First();
+    }
+
+    private static bool IsPrimaryCandidate(Win32WindowRecord window)
+    {
+        if (window.IsMinimized || window.IsCloaked || !window.Bounds.IsValid)
+        {
+            return false;
+        }
+
+        var hasLargeBounds = window.Bounds.Width >= 320 && window.Bounds.Height >= 180;
+        if (!hasLargeBounds)
+        {
+            return false;
+        }
+
+        if (window.IsVisible)
+        {
+            return true;
+        }
+
+        // Chromium-family windows can present as non-visible while still being
+        // the active top-level capture target; accept them when they look like
+        // a normal content window.
+        var hasMeaningfulTitle = !string.IsNullOrWhiteSpace(window.Title);
+        return hasMeaningfulTitle && hasLargeBounds;
     }
 
     private static WindowLocatorResult ToResult(Win32WindowRecord window, WindowBounds desktopBounds)

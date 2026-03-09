@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 public sealed class FfmpegVideoCaptureService : IVideoCaptureService
 {
     private static readonly TimeSpan MinimumCaptureDuration = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan CaptureProcessWaitTimeout = TimeSpan.FromSeconds(20);
     private readonly IProcessLauncher _processLauncher;
     private readonly IFileStorage _fileStorage;
     private readonly IWindowLocator _windowLocator;
@@ -66,7 +67,7 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
             }
 
             var handle = await _processLauncher.StartProcessAsync(
-                new ProcessStartRequest(_options.FfmpegPath, arguments, request.OutputDirectory),
+                new ProcessStartRequest(_options.FfmpegPath, arguments, request.OutputDirectory, CaptureProcessWaitTimeout),
                 cancellationToken);
 
             var state = new CaptureProcessState(handle, rawVideoPath, modeUsed, windowTitle, processId, bounds);
@@ -181,8 +182,19 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
                 throw new InvalidOperationException("Resolved window capture bounds are invalid.");
             }
 
+            // gdigrab offsets are relative to desktop capture origin; normalize to desktop bounds.
+            var normalizedBounds = new WindowBounds(
+                captureBounds.X - desktopBounds.X,
+                captureBounds.Y - desktopBounds.Y,
+                captureBounds.Width,
+                captureBounds.Height);
+            if (!normalizedBounds.IsValid)
+            {
+                throw new InvalidOperationException("Normalized window capture bounds are invalid.");
+            }
+
             return (
-                FfmpegCommandBuilder.BuildWindowCaptureArguments(_options, captureBounds, rawVideoPath),
+                FfmpegCommandBuilder.BuildWindowCaptureArguments(_options, normalizedBounds, rawVideoPath),
                 "Window",
                 locateResult.Title,
                 locateResult.ProcessId,
