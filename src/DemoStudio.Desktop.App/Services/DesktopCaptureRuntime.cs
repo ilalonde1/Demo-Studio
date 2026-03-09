@@ -107,7 +107,7 @@ public sealed class DesktopCaptureRuntime
 
         while (true)
         {
-            var maxAttemptsForCurrentMode = ResolveMaxAttempts(effectiveTargetSettings, desktopFallbackAttempted);
+            var maxAttemptsForCurrentMode = ResolveMaxAttempts(effectiveTargetSettings);
             attempt++;
             var start = await captureService.StartAsync(new CaptureStartRequest(run, outputDirectory, rawVideoPath), cancellationToken);
             if (!start.Succeeded)
@@ -157,7 +157,13 @@ public sealed class DesktopCaptureRuntime
                 break;
             }
 
-            await captureService.StopAsync(new CaptureStopRequest(run, effectiveRawPath), cancellationToken);
+            var startupStop = await captureService.StopAsync(new CaptureStopRequest(run, effectiveRawPath), cancellationToken);
+            if (!startupStop.Succeeded && !string.IsNullOrWhiteSpace(startupStop.ErrorMessage))
+            {
+                startupHealthy = CaptureRuntimeResult.Failure(
+                    $"Capture startup handshake failed: {startupStop.ErrorMessage}");
+            }
+
             if (attempt < maxAttemptsForCurrentMode)
             {
                 await Task.Delay(350, cancellationToken);
@@ -210,11 +216,9 @@ public sealed class DesktopCaptureRuntime
         return CaptureRuntimeResult.Success(LastRawVideoPath, null);
     }
 
-    private static int ResolveMaxAttempts(CaptureTargetSettings settings, bool desktopFallbackAttempted)
+    private static int ResolveMaxAttempts(CaptureTargetSettings settings)
     {
-        if (!desktopFallbackAttempted
-            && settings.FallbackToDesktop
-            && string.Equals(settings.Mode, "Window", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(settings.Mode, "Window", StringComparison.OrdinalIgnoreCase))
         {
             return 1;
         }

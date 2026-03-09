@@ -9,8 +9,6 @@ namespace DemoStudio.Desktop.App.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
-    private static readonly TimeSpan CaptureStartupTimeout = TimeSpan.FromSeconds(30);
-
     private async Task StartClipAsync()
     {
         var stopwatch = Stopwatch.StartNew();
@@ -77,9 +75,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
 
-                using var startupCts = CancellationTokenSource.CreateLinkedTokenSource(startFlowCts.Token);
-                startupCts.CancelAfter(CaptureStartupTimeout);
-                var captureStart = await _captureRuntime.EnsureStartedAsync(targetSettings, startupCts.Token);
+                var captureStart = await _captureRuntime.EnsureStartedAsync(targetSettings, startFlowCts.Token);
                 if (!captureStart.Succeeded)
                 {
                     EndLiveClipTracking();
@@ -130,9 +126,9 @@ public sealed partial class MainWindowViewModel
             _snapshot = _sessionEngine.StopFailed(
                 BuildFailureReason(
                     "DS-DESK-START-003",
-                    $"Capture startup timed out after {CaptureStartupTimeout.TotalSeconds:0}s.",
+                    "Capture startup was interrupted before completion.",
                     null));
-            _lastRuntimeMessage = _snapshot.FailureReason ?? "Capture startup timed out.";
+            _lastRuntimeMessage = _snapshot.FailureReason ?? "Capture startup interrupted.";
             await PersistFinalizedSessionToHistoryAsync(_snapshot, null);
             await RefreshSessionHistoryAsync();
             await ClearDraftStateAsync();
