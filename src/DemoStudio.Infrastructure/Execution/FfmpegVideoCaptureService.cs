@@ -224,7 +224,21 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
 
             var captureBounds = _options.CropEnabled
                 ? CaptureRegionCalculator.ExpandWithinDesktop(bounds, desktopBounds, _options.CropPaddingPixels)
-                : bounds;
+                : CaptureRegionCalculator.ExpandWithinDesktop(bounds, desktopBounds, 0);
+            if (!captureBounds.Equals(bounds))
+            {
+                _logger.LogInformation(
+                    "Adjusted capture bounds to desktop limits for run {RunId}. Original={OX},{OY},{OW}x{OH} Adjusted={AX},{AY},{AW}x{AH}.",
+                    request.Run.Id,
+                    bounds.X,
+                    bounds.Y,
+                    bounds.Width,
+                    bounds.Height,
+                    captureBounds.X,
+                    captureBounds.Y,
+                    captureBounds.Width,
+                    captureBounds.Height);
+            }
 
             if (!captureBounds.IsValid)
             {
