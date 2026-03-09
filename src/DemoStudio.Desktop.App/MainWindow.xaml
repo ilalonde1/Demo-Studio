@@ -466,6 +466,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -475,23 +476,25 @@
                                 <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,10,10" Style="{StaticResource FieldLabelStyle}" Text="Record Type" />
                                 <ComboBox Grid.Row="0"
                                           Grid.Column="1"
-                                          Grid.ColumnSpan="4"
+                                          Grid.ColumnSpan="5"
                                           Margin="0,0,0,10"
                                           MinWidth="180"
-                                          ToolTip="Window captures only the selected app window. Desktop captures the full screen."
+                                          ToolTip="Window captures a selected app window. Stage captures the built-in stage workspace. Desktop captures the full screen."
                                           SelectedValue="{Binding Targeting.CaptureMode, UpdateSourceTrigger=PropertyChanged}"
                                           SelectedValuePath="Content">
                                     <ComboBoxItem Content="Window" />
+                                    <ComboBoxItem Content="Stage" />
                                     <ComboBoxItem Content="Desktop" />
                                 </ComboBox>
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,0,10,10" Style="{StaticResource FieldLabelStyle}" Text="Target Window" />
                                 <ComboBox Grid.Row="1"
                                          Grid.Column="1"
-                                         Margin="0,0,8,10"
-                                         ToolTip="Pick the window to capture."
-                                         ItemsSource="{Binding Targeting.WindowCandidates}"
-                                         SelectedItem="{Binding Targeting.SelectedWindowCandidate, UpdateSourceTrigger=PropertyChanged}">
+                                          Margin="0,0,8,10"
+                                          IsEnabled="{Binding IsWindowMode}"
+                                          ToolTip="Pick the window to capture."
+                                          ItemsSource="{Binding Targeting.WindowCandidates}"
+                                          SelectedItem="{Binding Targeting.SelectedWindowCandidate, UpdateSourceTrigger=PropertyChanged}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding DisplayName}" />
@@ -502,16 +505,24 @@
                                         Grid.Column="2"
                                         Margin="0,0,8,10"
                                         Content="Refresh"
+                                        IsEnabled="{Binding IsWindowMode}"
                                         ToolTip="Refresh currently available windows."
                                         Style="{StaticResource SecondaryButtonStyle}"
                                         Command="{Binding RefreshWindowsCommand}" />
                                 <Button Grid.Row="1"
                                         Grid.Column="3"
-                                        Margin="0,0,0,10"
+                                        Margin="0,0,8,10"
                                         Content="Focus"
                                         ToolTip="Bring the selected target window to the foreground."
                                         Style="{StaticResource SecondaryButtonStyle}"
                                         Command="{Binding FocusTargetCommand}" />
+                                <Button Grid.Row="1"
+                                        Grid.Column="4"
+                                        Margin="0,0,0,10"
+                                        Content="Open Stage"
+                                        ToolTip="Open or activate the Stage workspace window and lock capture to it."
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Command="{Binding OpenStageWorkspaceCommand}" />
                             </Grid>
                             <TextBlock Margin="0,6,0,0"
                                        Foreground="#4D628F"
@@ -519,6 +530,20 @@
                             <TextBlock Margin="0,8,0,0"
                                        Foreground="#4D628F"
                                        Text="Tip: Focus target once, then use Control Panel hotkeys while demoing." />
+                            <StackPanel Margin="0,8,0,0"
+                                        Orientation="Horizontal"
+                                        Visibility="{Binding IsStageMode, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock VerticalAlignment="Center"
+                                           Margin="0,0,8,0"
+                                           Foreground="#4D628F"
+                                           Text="Stage URL" />
+                                <TextBox Width="420"
+                                         Margin="0,0,8,0"
+                                         Text="{Binding StageStartupUrl, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Content="Open Stage Workspace"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Command="{Binding OpenStageWorkspaceCommand}" />
+                            </StackPanel>
                             <StackPanel Margin="0,10,0,0"
                                         Orientation="Horizontal">
                                 <Button Content="Save Session"

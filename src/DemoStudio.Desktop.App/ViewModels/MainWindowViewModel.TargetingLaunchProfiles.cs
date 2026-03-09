@@ -139,6 +139,11 @@ public sealed partial class MainWindowViewModel
         var stopwatch = Stopwatch.StartNew();
         try
         {
+            if (IsStageMode)
+            {
+                _ = await EnsureStageWorkspaceReadyAsync(bringToFront: false);
+            }
+
             var report = await BuildAndRunPreflightAsync();
             PreflightStatus = report.ToDisplayText();
             ReadinessLastChecked = $"Last checked: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}";

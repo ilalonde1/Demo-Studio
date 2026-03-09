@@ -299,6 +299,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         StopSessionCommand = new RelayCommand(_ => StopSessionAsync(), _ => CanStopSession);
         RefreshWindowsCommand = new RelayCommand(_ => RefreshWindowCandidates(), _ => CanEditTargetSettings);
         UseSelectedWindowCommand = new RelayCommand(_ => UseSelectedWindowAsync(), _ => CanUseSelectedWindow);
+        OpenStageWorkspaceCommand = new RelayCommand(_ => OpenStageWorkspaceAsync(), _ => CanOpenStageWorkspace);
         FocusTargetCommand = new RelayCommand(_ => FocusTargetAsync(), _ => CanFocusTarget);
         RefreshLaunchProfilesCommand = new RelayCommand(_ => RefreshLaunchProfilesAsync(), _ => CanEditTargetSettings);
         SaveLaunchProfileCommand = new RelayCommand(_ => SaveLaunchProfileAsync(), _ => CanSaveLaunchProfile);
@@ -342,6 +343,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             StopSessionCommand,
             RefreshWindowsCommand,
             UseSelectedWindowCommand,
+            OpenStageWorkspaceCommand,
             FocusTargetCommand,
             RefreshLaunchProfilesCommand,
             SaveLaunchProfileCommand,
@@ -389,6 +391,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     public ICommand RefreshWindowsCommand { get; private set; } = null!;
 
     public ICommand UseSelectedWindowCommand { get; private set; } = null!;
+    public ICommand OpenStageWorkspaceCommand { get; private set; } = null!;
 
     public ICommand FocusTargetCommand { get; private set; } = null!;
 
@@ -678,10 +681,10 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         }
     }
 
-    public bool CanUseSelectedWindow => CanEditTargetSettings && SelectedWindowCandidate is not null;
+    public bool CanUseSelectedWindow => CanEditTargetSettings && IsWindowMode && SelectedWindowCandidate is not null;
     public bool CanFocusTarget
         => !_isBusy
-            && string.Equals(CaptureMode, "Window", StringComparison.OrdinalIgnoreCase)
+            && (IsWindowMode || IsStageMode)
             && (!string.IsNullOrWhiteSpace(WindowHandleHex) || !string.IsNullOrWhiteSpace(WindowTitleContains));
 
     public string WindowSelectionStatus
@@ -990,6 +993,11 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
                 return true;
             }
 
+            if (IsStageMode)
+            {
+                return true;
+            }
+
             return !string.IsNullOrWhiteSpace(WindowHandleHex)
                 || SelectedWindowCandidate is not null
                 || !string.IsNullOrWhiteSpace(WindowTitleContains);
@@ -1030,6 +1038,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanExecutePrimaryWorkflow));
         OnPropertyChanged(nameof(CanEditTargetSettings));
         OnPropertyChanged(nameof(CanUseSelectedWindow));
+        OnPropertyChanged(nameof(CanOpenStageWorkspace));
         OnPropertyChanged(nameof(CanFocusTarget));
         OnPropertyChanged(nameof(CanSaveLaunchProfile));
         OnPropertyChanged(nameof(CanDeleteLaunchProfile));
@@ -1136,6 +1145,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(StorageRoot));
         OnPropertyChanged(nameof(CanEditTargetSettings));
         OnPropertyChanged(nameof(CaptureMode));
+        OnPropertyChanged(nameof(IsWindowMode));
+        OnPropertyChanged(nameof(IsStageMode));
         OnPropertyChanged(nameof(WindowTitleContains));
         OnPropertyChanged(nameof(WindowProcessName));
         OnPropertyChanged(nameof(WindowHandleHex));
@@ -1146,6 +1157,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(PresenterNotes));
         OnPropertyChanged(nameof(WindowSelectionStatus));
         OnPropertyChanged(nameof(CanUseSelectedWindow));
+        OnPropertyChanged(nameof(CanOpenStageWorkspace));
         OnPropertyChanged(nameof(CanFocusTarget));
         OnPropertyChanged(nameof(LaunchProfileName));
         OnPropertyChanged(nameof(LaunchExecutablePath));
@@ -1273,11 +1285,14 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private void RaiseTargetingAndLaunchState()
     {
         OnPropertyChanged(nameof(CaptureMode));
+        OnPropertyChanged(nameof(IsWindowMode));
+        OnPropertyChanged(nameof(IsStageMode));
         OnPropertyChanged(nameof(WindowTitleContains));
         OnPropertyChanged(nameof(WindowProcessName));
         OnPropertyChanged(nameof(WindowHandleHex));
         OnPropertyChanged(nameof(WindowSelectionStatus));
         OnPropertyChanged(nameof(CanUseSelectedWindow));
+        OnPropertyChanged(nameof(CanOpenStageWorkspace));
         OnPropertyChanged(nameof(CanFocusTarget));
         OnPropertyChanged(nameof(LaunchProfileName));
         OnPropertyChanged(nameof(LaunchExecutablePath));
@@ -1472,6 +1487,11 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 
     private void OnTargetingPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (string.Equals(e.PropertyName, nameof(TargetingLaunchViewModel.CaptureMode), StringComparison.Ordinal))
+        {
+            OnCaptureModeChanged();
+        }
+
         RaiseTargetingAndLaunchState();
     }
 
@@ -1599,6 +1619,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         catch
         {
         }
+
+        await CloseStageWorkspaceAsync();
 
         _captureWatchdogCoordinator.Dispose();
         _onboarding.PropertyChanged -= OnOnboardingPropertyChanged;

@@ -90,8 +90,9 @@ public sealed partial class MainWindowViewModel
 
     private CaptureTargetSettings BuildTargetSettings()
     {
+        var mode = IsStageMode ? "Window" : CaptureMode;
         return new CaptureTargetSettings(
-            Mode: CaptureMode,
+            Mode: mode,
             WindowTitleContains: string.IsNullOrWhiteSpace(WindowTitleContains) ? null : WindowTitleContains,
             WindowProcessName: string.IsNullOrWhiteSpace(WindowProcessName) ? null : WindowProcessName,
             WindowHandleHex: string.IsNullOrWhiteSpace(WindowHandleHex) ? null : WindowHandleHex,

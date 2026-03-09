@@ -37,7 +37,19 @@ public sealed partial class MainWindowViewModel
                 _lastFailureCode = null;
                 _lastDiagnosticsPath = null;
 
-                EnsureWindowTargetLockedFromSelection();
+                if (IsStageMode)
+                {
+                    if (!await EnsureStageWorkspaceReadyAsync(bringToFront: true))
+                    {
+                        _lastRuntimeMessage = "Stage workspace is unavailable. Open Stage Workspace and retry.";
+                        OnPropertyChanged(nameof(LastRuntimeMessage));
+                        return;
+                    }
+                }
+                else
+                {
+                    EnsureWindowTargetLockedFromSelection();
+                }
 
                 var preflight = await BuildAndRunPreflightAsync();
                 PreflightStatus = preflight.ToDisplayText();
@@ -52,7 +64,7 @@ public sealed partial class MainWindowViewModel
                 var targetSettings = BuildTargetSettings();
                 if (string.Equals(targetSettings.Mode, "Window", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (PresenterViewEnabled && _presenterViewService.TryMoveTargetToSecondary(targetSettings.WindowHandleHex))
+                    if (IsWindowMode && PresenterViewEnabled && _presenterViewService.TryMoveTargetToSecondary(targetSettings.WindowHandleHex))
                     {
                         _lastRuntimeMessage = "Presenter View: moved target to secondary monitor.";
                         OnPropertyChanged(nameof(LastRuntimeMessage));

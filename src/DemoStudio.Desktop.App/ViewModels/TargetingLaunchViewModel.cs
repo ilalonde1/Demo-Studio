@@ -33,7 +33,11 @@ public sealed class TargetingLaunchViewModel : INotifyPropertyChanged
         get => _captureMode;
         set
         {
-            var next = string.Equals(value, "Desktop", StringComparison.OrdinalIgnoreCase) ? "Desktop" : "Window";
+            var next = string.Equals(value, "Desktop", StringComparison.OrdinalIgnoreCase)
+                ? "Desktop"
+                : string.Equals(value, "Stage", StringComparison.OrdinalIgnoreCase)
+                    ? "Stage"
+                    : "Window";
             if (next == _captureMode)
             {
                 return;

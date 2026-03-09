@@ -92,7 +92,8 @@ public partial class RecorderHudWindow : Window
             return;
         }
 
-        if (!string.Equals(vm.CaptureMode, "Window", StringComparison.OrdinalIgnoreCase) ||
+        if ((!string.Equals(vm.CaptureMode, "Window", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(vm.CaptureMode, "Stage", StringComparison.OrdinalIgnoreCase)) ||
             !TryParseHandle(vm.WindowHandleHex, out var handle) ||
             !GetWindowRect(handle, out var rect))
         {

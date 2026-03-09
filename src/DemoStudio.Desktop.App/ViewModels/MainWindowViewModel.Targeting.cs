@@ -8,7 +8,7 @@ public sealed partial class MainWindowViewModel
 {
     private void EnsureWindowTargetLockedFromSelection()
     {
-        if (!string.Equals(CaptureMode, "Window", StringComparison.OrdinalIgnoreCase))
+        if (!IsWindowMode)
         {
             return;
         }
@@ -30,6 +30,16 @@ public sealed partial class MainWindowViewModel
     {
         if (!CanEditTargetSettings)
         {
+            return;
+        }
+
+        if (IsStageMode)
+        {
+            WindowCandidates.Clear();
+            SelectedWindowCandidate = null;
+            WindowSelectionStatus = "Stage mode uses DemoStudio Stage Workspace. Open Stage Workspace to lock target.";
+            OnPropertyChanged(nameof(WindowSelectionStatus));
+            RaiseCommandState();
             return;
         }
 
@@ -105,6 +115,13 @@ public sealed partial class MainWindowViewModel
 
         try
         {
+            if (IsStageMode && !await EnsureStageWorkspaceReadyAsync(bringToFront: true))
+            {
+                _lastRuntimeMessage = "Stage workspace unavailable. Open Stage Workspace and retry.";
+                OnPropertyChanged(nameof(LastRuntimeMessage));
+                return;
+            }
+
             EnsureWindowTargetLockedFromSelection();
             var result = await _windowFocusService.TryActivateAsync(BuildTargetSettings());
             _lastRuntimeMessage = result.Message;
