@@ -15,26 +15,12 @@ public sealed partial class MainWindowViewModel
         _captureWatchdogCoordinator.Start(
             BuildTargetSettings,
             PublishWatchdogMessageAsync,
-            ApplyReacquiredHandleAsync,
             StopFromWatchdogAsync);
     }
 
     private Task StopTargetWatchdogAsync()
     {
         return _captureWatchdogCoordinator.StopAsync();
-    }
-
-    private Task ApplyReacquiredHandleAsync(IntPtr handle)
-    {
-        var app = System.Windows.Application.Current;
-        if (app?.Dispatcher is null)
-        {
-            WindowHandleHex = $"0x{handle.ToInt64():X}";
-            return Task.CompletedTask;
-        }
-
-        var op = app.Dispatcher.InvokeAsync(() => WindowHandleHex = $"0x{handle.ToInt64():X}");
-        return op.Task;
     }
 
     private Task PublishWatchdogMessageAsync(string message)

@@ -43,19 +43,31 @@ public sealed partial class MainWindowViewModel
             WindowCandidates.Add(window);
         }
 
-        SelectedWindowCandidate =
-            (!string.IsNullOrWhiteSpace(priorHandle)
-                ? WindowCandidates.FirstOrDefault(x => string.Equals(x.HandleHex, priorHandle, StringComparison.OrdinalIgnoreCase))
-                : null)
-            ?? (!string.IsNullOrWhiteSpace(lockedHandle)
-                ? WindowCandidates.FirstOrDefault(x => string.Equals(x.HandleHex, lockedHandle, StringComparison.OrdinalIgnoreCase))
-                : null)
-            ?? WindowCandidates.FirstOrDefault();
-        WindowSelectionStatus = windows.Count == 0
-            ? "No capturable windows found."
-            : SelectedWindowCandidate is null
-                ? $"Found {windows.Count} capturable windows."
-                : $"Found {windows.Count} capturable windows. Selected: {SelectedWindowCandidate.DisplayName}.";
+        var matchedPrior = !string.IsNullOrWhiteSpace(priorHandle)
+            ? WindowCandidates.FirstOrDefault(x => string.Equals(x.HandleHex, priorHandle, StringComparison.OrdinalIgnoreCase))
+            : null;
+        var matchedLocked = !string.IsNullOrWhiteSpace(lockedHandle)
+            ? WindowCandidates.FirstOrDefault(x => string.Equals(x.HandleHex, lockedHandle, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        // Never silently retarget while a handle lock exists. Force explicit re-selection.
+        if (!string.IsNullOrWhiteSpace(lockedHandle) && matchedLocked is null)
+        {
+            SelectedWindowCandidate = null;
+            WindowSelectionStatus = windows.Count == 0
+                ? "Locked target is unavailable. No capturable windows found."
+                : $"Locked target {lockedHandle} is unavailable. Refresh and pick the exact window again.";
+        }
+        else
+        {
+            SelectedWindowCandidate = matchedPrior ?? matchedLocked ?? WindowCandidates.FirstOrDefault();
+            WindowSelectionStatus = windows.Count == 0
+                ? "No capturable windows found."
+                : SelectedWindowCandidate is null
+                    ? $"Found {windows.Count} capturable windows."
+                    : $"Found {windows.Count} capturable windows. Selected: {SelectedWindowCandidate.DisplayName}.";
+        }
+
         OnPropertyChanged(nameof(WindowSelectionStatus));
         RaiseCommandState();
     }

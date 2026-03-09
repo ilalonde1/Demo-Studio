@@ -22,10 +22,9 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
     public void Start(
         Func<CaptureTargetSettings> targetSettingsProvider,
         Func<string, Task> reportMessageAsync,
-        Func<IntPtr, Task> applyReacquiredHandleAsync,
         Func<string, Task> stopCaptureAsync)
     {
-        if (targetSettingsProvider is null || reportMessageAsync is null || applyReacquiredHandleAsync is null || stopCaptureAsync is null)
+        if (targetSettingsProvider is null || reportMessageAsync is null || stopCaptureAsync is null)
         {
             return;
         }
@@ -36,7 +35,7 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
         _cancellation = new CancellationTokenSource();
         var token = _cancellation.Token;
         _watchdogTask = Task.Run(
-            () => RunAsync(targetSettingsProvider, reportMessageAsync, applyReacquiredHandleAsync, stopCaptureAsync, token),
+            () => RunAsync(targetSettingsProvider, reportMessageAsync, stopCaptureAsync, token),
             token);
     }
 
@@ -72,7 +71,6 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
     private async Task RunAsync(
         Func<CaptureTargetSettings> targetSettingsProvider,
         Func<string, Task> reportMessageAsync,
-        Func<IntPtr, Task> applyReacquiredHandleAsync,
         Func<string, Task> stopCaptureAsync,
         CancellationToken cancellationToken)
     {
@@ -103,28 +101,6 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
                     consecutiveMisses = 0;
                     warningShown = false;
                 }
-                else if (!string.IsNullOrWhiteSpace(current.WindowHandleHex))
-                {
-                    var reacquire = await _windowLocator.FindAsync(
-                        new WindowLocatorRequest(
-                            TitleContains: null,
-                            TitleRegex: null,
-                            ProcessName: current.WindowProcessName,
-                            HandleHex: null,
-                            PreferExactHandle: false),
-                        cancellationToken);
-                    if (reacquire.Found)
-                    {
-                        await applyReacquiredHandleAsync(reacquire.Handle);
-                        await reportMessageAsync("Watchdog auto-reacquired target window handle.");
-                        consecutiveMisses = 0;
-                        warningShown = false;
-                    }
-                    else
-                    {
-                        consecutiveMisses++;
-                    }
-                }
                 else
                 {
                     consecutiveMisses++;
@@ -133,7 +109,7 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
                 if (consecutiveMisses >= warningThreshold && !warningShown)
                 {
                     warningShown = true;
-                    await reportMessageAsync("Watchdog warning: target window is temporarily unavailable. Trying to recover.");
+                    await reportMessageAsync("Watchdog warning: locked target window is unavailable.");
                 }
 
                 if (consecutiveMisses >= stopThreshold)
