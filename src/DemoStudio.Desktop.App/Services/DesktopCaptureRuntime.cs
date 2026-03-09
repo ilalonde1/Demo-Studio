@@ -107,12 +107,13 @@ public sealed class DesktopCaptureRuntime
 
         while (true)
         {
+            var maxAttemptsForCurrentMode = ResolveMaxAttempts(effectiveTargetSettings, desktopFallbackAttempted);
             attempt++;
             var start = await captureService.StartAsync(new CaptureStartRequest(run, outputDirectory, rawVideoPath), cancellationToken);
             if (!start.Succeeded)
             {
                 startFailureMessage = start.ErrorMessage ?? "Capture start failed.";
-                if (attempt < StartupAttempts)
+                if (attempt < maxAttemptsForCurrentMode)
                 {
                     await Task.Delay(350, cancellationToken);
                     continue;
@@ -157,7 +158,7 @@ public sealed class DesktopCaptureRuntime
             }
 
             await captureService.StopAsync(new CaptureStopRequest(run, effectiveRawPath), cancellationToken);
-            if (attempt < StartupAttempts)
+            if (attempt < maxAttemptsForCurrentMode)
             {
                 await Task.Delay(350, cancellationToken);
                 continue;
@@ -207,6 +208,18 @@ public sealed class DesktopCaptureRuntime
         }
 
         return CaptureRuntimeResult.Success(LastRawVideoPath, null);
+    }
+
+    private static int ResolveMaxAttempts(CaptureTargetSettings settings, bool desktopFallbackAttempted)
+    {
+        if (!desktopFallbackAttempted
+            && settings.FallbackToDesktop
+            && string.Equals(settings.Mode, "Window", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        return StartupAttempts;
     }
 
     public async Task<CaptureRuntimeResult> StopAsync(CancellationToken cancellationToken = default)
