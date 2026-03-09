@@ -263,7 +263,6 @@ public sealed class DesktopCaptureRuntime
             return CaptureRuntimeResult.Failure("Capture startup failed: raw output path is empty.");
         }
 
-        var fileObservedCount = 0;
         var deadline = DateTimeOffset.UtcNow + StartupProbeTimeout;
         while (DateTimeOffset.UtcNow <= deadline)
         {
@@ -273,20 +272,10 @@ public sealed class DesktopCaptureRuntime
                 return CaptureRuntimeResult.Success(rawVideoPath, null);
             }
 
-            if (File.Exists(rawVideoPath))
-            {
-                fileObservedCount++;
-                if (fileObservedCount >= 2)
-                {
-                    // Some ffmpeg/mp4 pipelines keep size at 0 briefly while startup is healthy.
-                    return CaptureRuntimeResult.Success(rawVideoPath, null);
-                }
-            }
-
             await Task.Delay(StartupProbeInterval, cancellationToken);
         }
 
-        return CaptureRuntimeResult.Failure("Capture startup handshake failed: output file did not begin writing within timeout.");
+        return CaptureRuntimeResult.Failure("Capture startup handshake failed: output file did not begin writing bytes within timeout.");
     }
 
     private static async Task<CaptureRuntimeResult> WaitForFinalizedOutputAsync(string? rawVideoPath, CancellationToken cancellationToken)
