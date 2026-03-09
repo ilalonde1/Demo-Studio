@@ -101,7 +101,9 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
         try
         {
             var elapsed = DateTimeOffset.UtcNow - state.StartedAtUtc;
-            if (elapsed < MinimumCaptureDuration)
+            var outputPath = state.RawVideoPath ?? request.RawVideoPath;
+            var hasWrittenOutput = TryGetFileLength(outputPath, out var bytesBeforeStop) && bytesBeforeStop > 0;
+            if (elapsed < MinimumCaptureDuration && hasWrittenOutput)
             {
                 var delay = MinimumCaptureDuration - elapsed;
                 if (delay > TimeSpan.Zero)
@@ -113,11 +115,12 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
             await state.Handle.StopAsync(cancellationToken);
 
             var execution = await state.Handle.WaitAsync(cancellationToken);
-            var outputExists = await _fileStorage.ExistsAsync(state.RawVideoPath ?? request.RawVideoPath, cancellationToken);
+            var outputExists = await _fileStorage.ExistsAsync(outputPath, cancellationToken);
 
             if (!outputExists)
             {
-                return new CaptureSessionStopResult(false, "FFmpeg stopped but output video file was not found.");
+                var detail = BuildExecutionDetail(execution);
+                return new CaptureSessionStopResult(false, $"FFmpeg stopped but output video file was not found. {detail}".Trim());
             }
 
             if (execution.TimedOut)
@@ -128,6 +131,12 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
             if (execution.Cancelled)
             {
                 return new CaptureSessionStopResult(false, "FFmpeg capture was cancelled.");
+            }
+
+            if (execution.ExitCode != 0)
+            {
+                var detail = BuildExecutionDetail(execution);
+                return new CaptureSessionStopResult(false, $"FFmpeg exited with code {execution.ExitCode}. {detail}".Trim());
             }
 
             return new CaptureSessionStopResult(true, null);
@@ -145,6 +154,46 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
         finally
         {
             await state.Handle.DisposeAsync();
+        }
+    }
+
+    private static string BuildExecutionDetail(ProcessExecutionResult execution)
+    {
+        if (string.IsNullOrWhiteSpace(execution.StdErr))
+        {
+            return string.Empty;
+        }
+
+        var flattened = execution.StdErr
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Trim();
+
+        if (flattened.Length > 260)
+        {
+            flattened = flattened[..260];
+        }
+
+        return string.IsNullOrWhiteSpace(flattened) ? string.Empty : $"ffmpeg: {flattened}";
+    }
+
+    private static bool TryGetFileLength(string path, out long length)
+    {
+        length = 0;
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+
+            var info = new FileInfo(path);
+            length = info.Length;
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
