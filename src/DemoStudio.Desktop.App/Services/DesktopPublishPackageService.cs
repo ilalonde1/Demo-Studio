@@ -4,7 +4,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
 using DemoStudio.Application.Abstractions.System;
-using DemoStudio.Infrastructure.Process;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -17,11 +16,6 @@ public sealed class DesktopPublishPackageService
     };
 
     private readonly IProcessLauncher _processLauncher;
-
-    public DesktopPublishPackageService()
-        : this(new ProcessLauncher())
-    {
-    }
 
     public DesktopPublishPackageService(IProcessLauncher processLauncher)
     {

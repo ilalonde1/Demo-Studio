@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.App.Services;
 
 namespace DemoStudio.Desktop.App.ViewModels;
@@ -80,7 +81,7 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
             var request = new DesktopPublishPackageRequest(
                 SessionId: context.LastFinalizedSessionId == Guid.Empty ? (record?.SessionId ?? Guid.NewGuid()) : context.LastFinalizedSessionId,
                 SourceVideoPath: sourceVideo,
-                OutputRoot: Path.Combine(_captureRuntime.StorageRoot, "publish"),
+                OutputRoot: DesktopStoragePaths.GetPublishDirectory(_captureRuntime.StorageRoot),
                 Title: record is null ? "DemoStudio Recording" : $"Demo {record.SessionId:N}",
                 Description: string.IsNullOrWhiteSpace(record?.ClipSummary) ? "Curated demo output package." : record!.ClipSummary!,
                 QualityPreset: context.SelectedComposeQualityPreset,
@@ -208,7 +209,8 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
             var rawDirectory = Path.GetDirectoryName(selectedSessionRecord.RawVideoPath!);
             if (!string.IsNullOrWhiteSpace(rawDirectory))
             {
-                return Path.Combine(rawDirectory, "curated", "compose-health.json");
+                return DesktopStoragePaths.GetComposeHealthPath(
+                    DesktopStoragePaths.GetCuratedDirectory(selectedSessionRecord.RawVideoPath!));
             }
         }
 

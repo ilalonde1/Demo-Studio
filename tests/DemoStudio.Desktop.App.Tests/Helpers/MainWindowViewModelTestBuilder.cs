@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.ViewModels;
 using DemoStudio.Desktop.App.Infrastructure;
@@ -55,10 +57,10 @@ internal static class MainWindowViewModelTestBuilder
             processRunner: processRunner,
             captureMediaCoordinator: new DesktopCaptureMediaCoordinator(captureRuntime, processRunner),
             narrationCoordinator: new DesktopNarrationCoordinator(captureRuntime,
-                new DesktopClipNarrationService(),
-                new DesktopAiNarrationService(),
+                new DesktopClipNarrationService(new NoOpProcessLauncher()),
+                new DesktopAiNarrationService(new HttpClient(new NoOpHttpMessageHandler())),
                 processRunner),
-            captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(),
+            captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(new DesktopWindowLocator()),
             clipCurationCoordinator: new DesktopClipCurationCoordinator(),
             dependencyHealthService: new DesktopDependencyHealthService(captureRuntime, processRunner),
             ffmpegOperationQueue: new DesktopFfmpegOperationQueue());
@@ -109,6 +111,17 @@ internal static class MainWindowViewModelTestBuilder
         public Task StopAsync(CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NoOpHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Array.Empty<byte>())
+            });
         }
     }
 }

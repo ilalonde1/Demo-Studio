@@ -1,18 +1,12 @@
 using System.Globalization;
 using System.IO;
 using DemoStudio.Application.Abstractions.System;
-using DemoStudio.Infrastructure.Process;
 
 namespace DemoStudio.Desktop.App.Services;
 
 public sealed class DesktopClipNarrationService
 {
     private readonly IProcessLauncher _processLauncher;
-
-    public DesktopClipNarrationService()
-        : this(new ProcessLauncher())
-    {
-    }
 
     public DesktopClipNarrationService(IProcessLauncher processLauncher)
     {
@@ -48,9 +42,15 @@ public sealed class DesktopClipNarrationService
         }
 
         Directory.CreateDirectory(directory);
-        if (File.Exists(outputPath))
+        try
         {
             File.Delete(outputPath);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
 
         var durationValue = Math.Max(0.5d, durationSeconds).ToString("0.###", CultureInfo.InvariantCulture);

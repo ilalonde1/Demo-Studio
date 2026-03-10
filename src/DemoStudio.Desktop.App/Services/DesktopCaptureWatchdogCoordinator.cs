@@ -9,11 +9,6 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
     private Task? _watchdogTask;
     private bool _stopTriggered;
 
-    public DesktopCaptureWatchdogCoordinator()
-        : this(new DesktopWindowLocator())
-    {
-    }
-
     public DesktopCaptureWatchdogCoordinator(IWindowLocator windowLocator)
     {
         _windowLocator = windowLocator ?? throw new ArgumentNullException(nameof(windowLocator));

@@ -1,4 +1,5 @@
 using System.IO;
+using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.App.ViewModels;
 
 namespace DemoStudio.Desktop.App.Services;
@@ -35,7 +36,7 @@ public sealed class DesktopNarrationCoordinator
 
     public async Task<NarrationOperationResult> RecordNarrationAsync(CurrentSessionClipItem clip, Guid sessionId, string microphoneDeviceName)
     {
-        var narrationRoot = Path.Combine(_captureRuntime.StorageRoot, "narration", sessionId.ToString("N"));
+        var narrationRoot = DesktopStoragePaths.GetNarrationDirectory(_captureRuntime.StorageRoot, sessionId);
         Directory.CreateDirectory(narrationRoot);
         var narrationPath = Path.Combine(narrationRoot, $"clip-{clip.Sequence:000}.m4a");
 
@@ -67,7 +68,7 @@ public sealed class DesktopNarrationCoordinator
         AiNarrationOptions options,
         CancellationToken cancellationToken = default)
     {
-        var narrationRoot = Path.Combine(_captureRuntime.StorageRoot, "narration", sessionId.ToString("N"));
+        var narrationRoot = DesktopStoragePaths.GetNarrationDirectory(_captureRuntime.StorageRoot, sessionId);
         Directory.CreateDirectory(narrationRoot);
         var narrationPath = Path.Combine(narrationRoot, $"clip-{clip.Sequence:000}-ai.mp3");
         var script = ResolveNarrationScript(clip);

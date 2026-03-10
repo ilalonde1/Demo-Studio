@@ -11,11 +11,6 @@ public sealed class DesktopAiNarrationService
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(25);
     private readonly HttpClient _httpClient;
 
-    public DesktopAiNarrationService()
-        : this(new HttpClient())
-    {
-    }
-
     public DesktopAiNarrationService(HttpClient httpClient)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -61,9 +56,15 @@ public sealed class DesktopAiNarrationService
         }
 
         Directory.CreateDirectory(directory);
-        if (File.Exists(outputPath))
+        try
         {
             File.Delete(outputPath);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
 
         var baseUrl = FirstNonEmpty(request.BaseUrl, Environment.GetEnvironmentVariable("OPENAI_BASE_URL"));

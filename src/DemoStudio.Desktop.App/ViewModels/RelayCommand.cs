@@ -66,7 +66,8 @@ public sealed class RelayCommand : ICommand
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"RelayCommand async execution failed: {ex}");
+            System.Diagnostics.Trace.TraceError(
+                $"RelayCommand async execution failed: {ex}");
         }
         finally
         {

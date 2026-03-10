@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.App.ViewModels;
 
 namespace DemoStudio.Desktop.App.Services;
@@ -86,7 +87,7 @@ public sealed class DesktopCaptureMediaCoordinator
         try
         {
             var sessionKey = sessionId == Guid.Empty ? "session" : sessionId.ToString("N");
-            var previewRoot = Path.Combine(_captureRuntime.StorageRoot, "previews", sessionKey);
+            var previewRoot = DesktopStoragePaths.GetPreviewsDirectory(_captureRuntime.StorageRoot, sessionKey);
             Directory.CreateDirectory(previewRoot);
 
             var previewPath = Path.Combine(previewRoot, $"clip-{clip.Sequence:000}.mp4");
@@ -172,7 +173,7 @@ public sealed class DesktopCaptureMediaCoordinator
         var semaphoreHeld = false;
         try
         {
-            var thumbnailsRoot = Path.Combine(_captureRuntime.StorageRoot, "thumbnails", sessionKey);
+            var thumbnailsRoot = DesktopStoragePaths.GetThumbnailsDirectory(_captureRuntime.StorageRoot, sessionKey);
             Directory.CreateDirectory(thumbnailsRoot);
             var thumbnailPath = Path.Combine(thumbnailsRoot, $"clip-{clip.Sequence:000}.jpg");
             if (File.Exists(thumbnailPath))

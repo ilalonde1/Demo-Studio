@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.IO;
 using System.Diagnostics;
@@ -6,7 +7,6 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Infrastructure;
-using DemoStudio.Infrastructure.Process;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -22,11 +22,6 @@ public sealed class DesktopVideoComposeService
     private const long CacheMaxBytes = 2L * 1024 * 1024 * 1024; // 2 GB
     private const long CacheTrimTargetBytes = (long)(CacheMaxBytes * 0.85); // trim below 85%
     private readonly IProcessLauncher _processLauncher;
-
-    public DesktopVideoComposeService()
-        : this(new ProcessLauncher())
-    {
-    }
 
     public DesktopVideoComposeService(IProcessLauncher processLauncher)
     {
@@ -1000,7 +995,9 @@ internal sealed record ComposeStyleProfile(
 {
     public static ComposeStyleProfile Normalize(string? style)
     {
-        var font = "C\\:/Windows/Fonts/arial.ttf";
+        var font = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Fonts),
+            "arial.ttf");
         return (style ?? string.Empty).Trim().ToLowerInvariant() switch
         {
             "tutorial" => new ComposeStyleProfile("Tutorial", font, "white", "white@0.82", "black@0.6", "0x1E293B", 64, 34, 30, 2, 2),
