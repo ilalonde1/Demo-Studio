@@ -7,7 +7,7 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
     private readonly IWindowLocator _windowLocator;
     private CancellationTokenSource? _cancellation;
     private Task? _watchdogTask;
-    private bool _stopTriggered;
+    private volatile bool _stopTriggered;
 
     public DesktopCaptureWatchdogCoordinator(IWindowLocator windowLocator)
     {

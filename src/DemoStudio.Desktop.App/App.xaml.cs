@@ -12,6 +12,8 @@ public partial class App : System.Windows.Application
     private DesktopCrashReporter? _crashReporter;
     private DesktopRuntimeLogService? _runtimeLog;
 
+    internal DesktopRuntimeLogService? RuntimeLog => _runtimeLog;
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);

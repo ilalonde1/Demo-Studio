@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Threading;
 using System.Windows.Input;
+using DemoStudio.Desktop.App.Services;
+
 namespace DemoStudio.Desktop.App.ViewModels;
 
 public sealed class RelayCommand : ICommand
@@ -9,6 +11,7 @@ public sealed class RelayCommand : ICommand
     private readonly Func<object?, Task>? _executeAsync;
     private readonly Predicate<object?>? _canExecute;
     private readonly bool _allowConcurrentExecution;
+    private readonly DesktopRuntimeLogService? _runtimeLog;
     private int _isExecuting;
 
     public RelayCommand(Action<object?> execute, Predicate<object?>? canExecute = null, bool allowConcurrentExecution = true)
@@ -16,6 +19,7 @@ public sealed class RelayCommand : ICommand
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
         _canExecute = canExecute;
         _allowConcurrentExecution = allowConcurrentExecution;
+        _runtimeLog = (System.Windows.Application.Current as App)?.RuntimeLog;
     }
 
     public RelayCommand(Func<object?, Task> executeAsync, Predicate<object?>? canExecute = null, bool allowConcurrentExecution = false)
@@ -23,6 +27,7 @@ public sealed class RelayCommand : ICommand
         _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
         _canExecute = canExecute;
         _allowConcurrentExecution = allowConcurrentExecution;
+        _runtimeLog = (System.Windows.Application.Current as App)?.RuntimeLog;
     }
 
     public event EventHandler? CanExecuteChanged;
@@ -66,8 +71,17 @@ public sealed class RelayCommand : ICommand
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceError(
-                $"RelayCommand async execution failed: {ex}");
+            try
+            {
+                System.Diagnostics.Trace.TraceError(
+                    $"RelayCommand async execution failed: {ex}");
+
+                _runtimeLog?.Error("UI command failed", ex);
+            }
+            catch
+            {
+                // Never throw from command exception handling
+            }
         }
         finally
         {
