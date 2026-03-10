@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
 using DemoStudio.Application.Abstractions.System;
+using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Infrastructure.Process;
 
 namespace DemoStudio.Desktop.App.Services;
@@ -67,12 +68,12 @@ public sealed class DesktopVideoComposeService
             return DesktopVideoComposeResult.Failure("Compose failed: raw video directory is invalid.");
         }
 
-        var curatedDirectory = Path.Combine(rawDirectory, "curated");
+        var curatedDirectory = DesktopStoragePaths.GetCuratedDirectory(manifest.RawVideoPath);
         Directory.CreateDirectory(curatedDirectory);
-        var cacheDirectory = Path.Combine(curatedDirectory, ".compose-cache");
+        var cacheDirectory = DesktopStoragePaths.GetComposeCacheDirectory(curatedDirectory);
         Directory.CreateDirectory(cacheDirectory);
         TryPruneComposeCache(cacheDirectory, DateTimeOffset.UtcNow);
-        var telemetryPath = Path.Combine(curatedDirectory, "compose-telemetry.jsonl");
+        var telemetryPath = DesktopStoragePaths.GetComposeTelemetryPath(curatedDirectory);
         var telemetryStages = new List<ComposeTelemetryStage>();
         var composeStopwatch = Stopwatch.StartNew();
 
@@ -766,7 +767,7 @@ public sealed class DesktopVideoComposeService
     {
         try
         {
-            var outputPath = Path.Combine(curatedDirectory, "compose-health.json");
+            var outputPath = DesktopStoragePaths.GetComposeHealthPath(curatedDirectory);
             var runs = ReadTelemetryRuns(telemetryPath, 200);
             var cacheStats = GetCacheStats(cacheDirectory);
             var summary = BuildTelemetrySummary(runs, latest);
