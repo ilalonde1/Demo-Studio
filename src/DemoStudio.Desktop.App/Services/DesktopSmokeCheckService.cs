@@ -1,4 +1,5 @@
 using DemoStudio.Capture.Abstractions.Interfaces;
+using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Domain.Entities;
 using DemoStudio.Infrastructure.Execution;
 using DemoStudio.Infrastructure.Execution.Windows;
@@ -13,11 +14,16 @@ namespace DemoStudio.Desktop.App.Services;
 
 public sealed class DesktopSmokeCheckService
 {
+    private readonly IProcessLauncher _processLauncher;
     private readonly string _storageRoot;
     private readonly string _ffmpegPath;
 
-    public DesktopSmokeCheckService(string storageRoot, string ffmpegPath)
+    public DesktopSmokeCheckService(
+        string storageRoot,
+        string ffmpegPath,
+        IProcessLauncher processLauncher)
     {
+        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
         _storageRoot = storageRoot;
         _ffmpegPath = ffmpegPath;
     }
@@ -56,7 +62,7 @@ public sealed class DesktopSmokeCheckService
         };
 
         var captureService = new FfmpegVideoCaptureService(
-            new ProcessLauncher(),
+            _processLauncher,
             new LocalFileStorage(smokeRoot),
             new NullWindowLocator(),
             Options.Create(captureOptions),

@@ -73,7 +73,8 @@ internal static class DesktopCompositionRoot
         services.AddSingleton(sp =>
         {
             var paths = sp.GetRequiredService<DesktopRuntimePaths>();
-            return new DesktopSmokeCheckService(paths.StorageRoot, paths.FfmpegPath);
+            var processLauncher = sp.GetRequiredService<IProcessLauncher>();
+            return new DesktopSmokeCheckService(paths.StorageRoot, paths.FfmpegPath, processLauncher);
         });
         services.AddSingleton(sp =>
         {

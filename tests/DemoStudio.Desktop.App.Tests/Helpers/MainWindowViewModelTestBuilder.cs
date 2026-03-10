@@ -44,7 +44,7 @@ internal static class MainWindowViewModelTestBuilder
             sessionHistoryService: new DesktopSessionHistoryService(root),
             diagnosticsBundleService: new DesktopDiagnosticsBundleService(root),
             performanceMetricsService: new DesktopPerformanceMetricsService(),
-            smokeCheckService: new DesktopSmokeCheckService(root, "ffmpeg"),
+            smokeCheckService: new DesktopSmokeCheckService(root, "ffmpeg", new NoOpProcessLauncher()),
             composeManifestService: new DesktopComposeManifestService(),
             videoComposeService: new DesktopVideoComposeService(new NoOpProcessLauncher()),
             publishPackageService: new DesktopPublishPackageService(new NoOpProcessLauncher()),
