@@ -25,12 +25,12 @@ public sealed class DesktopNarrationCoordinator
         DesktopCaptureRuntime captureRuntime,
         DesktopClipNarrationService clipNarrationService,
         DesktopAiNarrationService aiNarrationService,
-        DesktopProcessRunner? processRunner = null)
+        DesktopProcessRunner processRunner)
     {
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
         _clipNarrationService = clipNarrationService ?? throw new ArgumentNullException(nameof(clipNarrationService));
         _aiNarrationService = aiNarrationService ?? throw new ArgumentNullException(nameof(aiNarrationService));
-        _processRunner = processRunner ?? new DesktopProcessRunner();
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     }
 
     public async Task<NarrationOperationResult> RecordNarrationAsync(CurrentSessionClipItem clip, Guid sessionId, string microphoneDeviceName)
