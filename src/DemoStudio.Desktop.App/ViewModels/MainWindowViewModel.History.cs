@@ -138,6 +138,25 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(SessionHistoryStatus));
     }
 
+    private void CopySelectedFixHint()
+    {
+        if (!CanCopyFixHint || SelectedSessionRecord is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(SelectedSessionRecord.FixHint ?? string.Empty);
+            _lastRuntimeMessage = "Fix hint copied to clipboard.";
+            OnPropertyChanged(nameof(LastRuntimeMessage));
+        }
+        catch (Exception ex)
+        {
+            SetRuntimeFailure("DS-DESK-HIST-003", "Copy fix hint failed.", ex);
+        }
+    }
+
     private async Task PersistFinalizedSessionToHistoryAsync(RecorderSessionSnapshot finalizedSnapshot, string? preferredRawPath)
     {
         var rawPath = string.IsNullOrWhiteSpace(preferredRawPath)

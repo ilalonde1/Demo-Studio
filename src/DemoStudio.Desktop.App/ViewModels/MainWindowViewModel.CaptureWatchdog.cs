@@ -98,4 +98,24 @@ public sealed partial class MainWindowViewModel
             WindowHandleHex: string.IsNullOrWhiteSpace(WindowHandleHex) ? null : WindowHandleHex,
             FallbackToDesktop: FallbackToDesktop);
     }
+
+    private string BuildFailureReason(string failureCode, string reason, Exception? exception)
+    {
+        var cleanReason = string.IsNullOrWhiteSpace(reason) ? "Unknown failure." : reason.Trim();
+        _lastFailureCode = failureCode;
+        _lastDiagnosticsPath = _diagnosticsBundleService.TryWriteFailureBundle(
+            _snapshot.SessionId,
+            _captureRuntime.LastRawVideoPath,
+            failureCode,
+            cleanReason,
+            exception,
+            BuildTargetSettings(),
+            _captureRuntime.FfmpegPath,
+            LaunchExecutablePath,
+            LaunchArguments,
+            LaunchWorkingDirectory);
+
+        var diagnosticsNote = string.IsNullOrWhiteSpace(_lastDiagnosticsPath) ? null : $"Diagnostics: {_lastDiagnosticsPath}";
+        return BuildFailureDisplay(failureCode, cleanReason, diagnosticsNote);
+    }
 }

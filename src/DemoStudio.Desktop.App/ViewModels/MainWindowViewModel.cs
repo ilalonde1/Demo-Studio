@@ -22,17 +22,18 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly DesktopWindowFocusService _windowFocusService;
     private readonly DesktopSessionHistoryService _sessionHistoryService;
     private readonly DesktopDiagnosticsBundleService _diagnosticsBundleService;
-    private readonly DesktopPerformanceMetricsService _performanceMetricsService;
     private readonly DesktopSmokeCheckService _smokeCheckService;
     private readonly DesktopComposeManifestService _composeManifestService;
     private readonly DesktopVideoComposeService _videoComposeService;
     private readonly DesktopNarrationCoordinator _narrationCoordinator;
-    private readonly DesktopPublishPackageService _publishPackageService;
     private readonly OnboardingViewModel _onboarding;
     private readonly DesktopDemoTemplateService _demoTemplateService;
     private readonly DesktopSessionRecoveryService _sessionRecoveryService;
     private readonly DesktopPresenterViewService _presenterViewService;
     private readonly DesktopProcessRunner _processRunner;
+    private readonly HealthMonitorViewModel _healthMonitor;
+    private readonly PublishWorkflowViewModel _publishWorkflow;
+    private readonly CaptureSessionViewModel _captureSession;
     private readonly TargetingLaunchViewModel _targeting;
     private readonly SessionHistoryViewModel _history;
     private readonly ProductionWorkspaceViewModel _production;
@@ -43,40 +44,20 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly DesktopCaptureMediaCoordinator _captureMediaCoordinator;
     private readonly DesktopCaptureWatchdogCoordinator _captureWatchdogCoordinator;
     private readonly DesktopClipCurationCoordinator _clipCurationCoordinator;
-    private readonly DesktopDependencyHealthService _dependencyHealthService;
     private readonly DesktopFfmpegOperationQueue _ffmpegOperationQueue;
     private readonly CancellationTokenSource _lifecycleCancellation = new();
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private RecorderSessionSnapshot _snapshot;
     private bool _isBusy;
-    private bool _startClipInFlight;
-    private bool _startCancellationRequested;
-    private CancellationTokenSource? _startClipCancellation;
 
     private string _lastRuntimeMessage = "Ready";
 
     private string _smokeCheckStatus = "Smoke check not run.";
 
-    private string _performanceSummary = "Perf: no samples yet.";
     private readonly DispatcherTimer _liveClipTimer;
     private readonly DispatcherTimer _telemetryTimer;
     private readonly DispatcherTimer _draftAutosaveTimer;
     private string _lastDraftFingerprint = string.Empty;
-    private string _memoryWorkingSetText = "Working Set: -";
-    private string _memoryPrivateText = "Private Memory: -";
-    private string _captureWriteRateText = "Capture Write: -";
-    private string _captureFileSizeText = "Capture Size: -";
-    private string _composeLastRunText = "Compose Last Run: -";
-    private long _telemetryLastBytes;
-    private DateTimeOffset _telemetryLastUtc = DateTimeOffset.MinValue;
-    private string _performanceHealthLabel = "Healthy";
-    private string _performanceHealthDetail = "All runtime metrics are within budget.";
-    private string _performanceHealthBackground = "#EAF9EE";
-    private string _performanceHealthBorder = "#9BD3A9";
-    private DesktopDependencyHealthSnapshot _dependencyHealthSnapshot = DesktopDependencyHealthSnapshot.Uninitialized();
-    private DateTimeOffset _dependencyHealthLastRefreshUtc = DateTimeOffset.MinValue;
-    private bool _dependencyHealthRefreshInFlight;
-    private int _telemetryRefreshInFlight;
     private int _draftAutosaveInFlight;
     private int _clipThumbnailBackfillInFlight;
     private long _lastBackgroundFailureTicks;
@@ -107,31 +88,6 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         set => _sessionState.LastDiagnosticsPath = value;
     }
 
-    public MainWindowViewModel(RecorderSessionEngine sessionEngine)
-        : this(
-            sessionEngine,
-            new DesktopCaptureRuntime(new DesktopRecorderOptions()),
-            new DesktopWindowCatalogService(),
-            new DesktopLaunchProfileService(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop")),
-            new DesktopTargetLauncher(),
-            new DesktopCapturePreflightService(),
-            new DesktopWindowFocusService(),
-            new DesktopSessionHistoryService(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop")),
-            new DesktopDiagnosticsBundleService(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop")),
-            new DesktopPerformanceMetricsService(),
-            new DesktopSmokeCheckService(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop"),
-                "ffmpeg"),
-            new DesktopComposeManifestService(),
-            new DesktopVideoComposeService(),
-            new DesktopPublishPackageService(),
-            new DesktopOnboardingService(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop")),
-            new DesktopDemoTemplateService(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop")),
-            new DesktopSessionRecoveryService(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop")),
-            new DesktopPresenterViewService())
-    {
-    }
-
     public MainWindowViewModel(
         RecorderSessionEngine sessionEngine,
         DesktopCaptureRuntime captureRuntime,
@@ -151,13 +107,13 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         DesktopDemoTemplateService demoTemplateService,
         DesktopSessionRecoveryService sessionRecoveryService,
         DesktopPresenterViewService presenterViewService,
-        DesktopProcessRunner? processRunner = null,
-        DesktopCaptureMediaCoordinator? captureMediaCoordinator = null,
-        DesktopNarrationCoordinator? narrationCoordinator = null,
-        DesktopCaptureWatchdogCoordinator? captureWatchdogCoordinator = null,
-        DesktopClipCurationCoordinator? clipCurationCoordinator = null,
-        DesktopDependencyHealthService? dependencyHealthService = null,
-        DesktopFfmpegOperationQueue? ffmpegOperationQueue = null)
+        DesktopProcessRunner processRunner,
+        DesktopCaptureMediaCoordinator captureMediaCoordinator,
+        DesktopNarrationCoordinator narrationCoordinator,
+        DesktopCaptureWatchdogCoordinator captureWatchdogCoordinator,
+        DesktopClipCurationCoordinator clipCurationCoordinator,
+        DesktopDependencyHealthService dependencyHealthService,
+        DesktopFfmpegOperationQueue ffmpegOperationQueue)
     {
         _sessionEngine = sessionEngine ?? throw new ArgumentNullException(nameof(sessionEngine));
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
@@ -168,18 +124,25 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _windowFocusService = windowFocusService ?? throw new ArgumentNullException(nameof(windowFocusService));
         _sessionHistoryService = sessionHistoryService ?? throw new ArgumentNullException(nameof(sessionHistoryService));
         _diagnosticsBundleService = diagnosticsBundleService ?? throw new ArgumentNullException(nameof(diagnosticsBundleService));
-        _performanceMetricsService = performanceMetricsService ?? throw new ArgumentNullException(nameof(performanceMetricsService));
+        var performanceMetricsServiceRequired = performanceMetricsService ?? throw new ArgumentNullException(nameof(performanceMetricsService));
         _smokeCheckService = smokeCheckService ?? throw new ArgumentNullException(nameof(smokeCheckService));
         _composeManifestService = composeManifestService ?? throw new ArgumentNullException(nameof(composeManifestService));
         _videoComposeService = videoComposeService ?? throw new ArgumentNullException(nameof(videoComposeService));
-        _publishPackageService = publishPackageService ?? throw new ArgumentNullException(nameof(publishPackageService));
+        var publishPackageServiceRequired = publishPackageService ?? throw new ArgumentNullException(nameof(publishPackageService));
         var onboardingServiceRequired = onboardingService ?? throw new ArgumentNullException(nameof(onboardingService));
         _onboarding = new OnboardingViewModel(onboardingServiceRequired);
         _onboarding.PropertyChanged += OnOnboardingPropertyChanged;
         _demoTemplateService = demoTemplateService ?? throw new ArgumentNullException(nameof(demoTemplateService));
         _sessionRecoveryService = sessionRecoveryService ?? throw new ArgumentNullException(nameof(sessionRecoveryService));
         _presenterViewService = presenterViewService ?? throw new ArgumentNullException(nameof(presenterViewService));
-        _processRunner = processRunner ?? new DesktopProcessRunner();
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+        var dependencyHealthServiceRequired = dependencyHealthService ?? throw new ArgumentNullException(nameof(dependencyHealthService));
+        _healthMonitor = new HealthMonitorViewModel(
+            dependencyHealthServiceRequired,
+            performanceMetricsServiceRequired,
+            _smokeCheckService,
+            _captureRuntime);
+        _healthMonitor.PropertyChanged += OnHealthMonitorPropertyChanged;
         _targeting = new TargetingLaunchViewModel();
         _targeting.PropertyChanged += OnTargetingPropertyChanged;
         _history = new SessionHistoryViewModel();
@@ -192,13 +155,23 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _workflow.PropertyChanged += OnWorkflowPropertyChanged;
         _sessionState = new SessionStateViewModel();
         _sessionState.PropertyChanged += OnSessionStatePropertyChanged;
-        _captureMediaCoordinator = captureMediaCoordinator ?? new DesktopCaptureMediaCoordinator(_captureRuntime, _processRunner);
-        _narrationCoordinator = narrationCoordinator ?? new DesktopNarrationCoordinator(_captureRuntime, new DesktopClipNarrationService(), new DesktopAiNarrationService(), _processRunner);
-        _captureWatchdogCoordinator = captureWatchdogCoordinator ?? new DesktopCaptureWatchdogCoordinator();
-        _clipCurationCoordinator = clipCurationCoordinator ?? new DesktopClipCurationCoordinator();
-        _dependencyHealthService = dependencyHealthService ?? new DesktopDependencyHealthService(_captureRuntime, _processRunner);
-        _ffmpegOperationQueue = ffmpegOperationQueue ?? new DesktopFfmpegOperationQueue();
-        _dependencyHealthSnapshot = _dependencyHealthService.Current;
+        _captureMediaCoordinator = captureMediaCoordinator ?? throw new ArgumentNullException(nameof(captureMediaCoordinator));
+        _narrationCoordinator = narrationCoordinator ?? throw new ArgumentNullException(nameof(narrationCoordinator));
+        _captureWatchdogCoordinator = captureWatchdogCoordinator ?? throw new ArgumentNullException(nameof(captureWatchdogCoordinator));
+        _clipCurationCoordinator = clipCurationCoordinator ?? throw new ArgumentNullException(nameof(clipCurationCoordinator));
+        _ffmpegOperationQueue = ffmpegOperationQueue ?? throw new ArgumentNullException(nameof(ffmpegOperationQueue));
+        _captureSession = new CaptureSessionViewModel(
+            _sessionEngine,
+            _captureRuntime,
+            _windowFocusService,
+            _presenterViewService,
+            _clipCurationCoordinator);
+        _publishWorkflow = new PublishWorkflowViewModel(
+            publishPackageServiceRequired,
+            _processRunner,
+            _ffmpegOperationQueue,
+            _captureRuntime);
+        _publishWorkflow.AttachProductionWorkspace(_production);
         _snapshot = _sessionEngine.Snapshot();
         _liveClipTimer = new DispatcherTimer
         {
@@ -471,20 +444,21 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 
     public string LastRuntimeMessage => _lastRuntimeMessage;
 
-    public string PerformanceSummary => _performanceSummary;
-    public string MemoryWorkingSetText => _memoryWorkingSetText;
-    public string MemoryPrivateText => _memoryPrivateText;
-    public string CaptureWriteRateText => _captureWriteRateText;
-    public string CaptureFileSizeText => _captureFileSizeText;
-    public string ComposeLastRunText => _composeLastRunText;
-    public string PerformanceHealthLabel => _performanceHealthLabel;
-    public string PerformanceHealthDetail => _performanceHealthDetail;
-    public string PerformanceHealthBackground => _performanceHealthBackground;
-    public string PerformanceHealthBorder => _performanceHealthBorder;
-    public string DependencyHealthLabel => _dependencyHealthSnapshot.IsHealthy ? "Dependencies: Healthy" : "Dependencies: Degraded";
-    public string DependencyHealthDetail => _dependencyHealthSnapshot.Summary;
-    public string DependencyHealthBackground => _dependencyHealthSnapshot.IsHealthy ? "#EAF9EE" : "#FDECEC";
-    public string DependencyHealthBorder => _dependencyHealthSnapshot.IsHealthy ? "#9BD3A9" : "#E09A9A";
+    public string PerformanceSummary => _healthMonitor.PerformanceSummary;
+    public string MemoryWorkingSetText => _healthMonitor.MemoryWorkingSetText;
+    public string MemoryPrivateText => _healthMonitor.MemoryPrivateText;
+    public string CaptureWriteRateText => _healthMonitor.CaptureWriteRateText;
+    public string CaptureFileSizeText => _healthMonitor.CaptureFileSizeText;
+    public string ComposeLastRunText => _healthMonitor.ComposeLastRunText;
+    public string PerformanceHealthLabel => _healthMonitor.PerformanceHealthLabel;
+    public string PerformanceHealthDetail => _healthMonitor.PerformanceHealthDetail;
+    public string PerformanceHealthBackground => _healthMonitor.PerformanceHealthBackground;
+    public string PerformanceHealthBorder => _healthMonitor.PerformanceHealthBorder;
+    public string DependencyHealthLabel => _healthMonitor.DependencyHealthLabel;
+    public string DependencyHealthDetail => _healthMonitor.DependencyHealthDetail;
+    public string DependencyHealthBackground => _healthMonitor.DependencyHealthBackground;
+    public string DependencyHealthBorder => _healthMonitor.DependencyHealthBorder;
+    public HealthMonitorViewModel HealthMonitor => _healthMonitor;
 
     public string StorageRoot => _captureRuntime.StorageRoot;
 
@@ -929,21 +903,21 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 
     public string PublishStatus
     {
-        get => _production.PublishStatus;
-        private set => _production.PublishStatus = value;
+        get => _publishWorkflow.PublishStatus;
     }
 
     public string ShareSummary
     {
-        get => _production.ShareSummary;
-        private set => _production.ShareSummary = value;
+        get => _publishWorkflow.ShareSummary;
     }
-    public bool CanCopyShareSummary => !_isBusy && !string.IsNullOrWhiteSpace(_production.ShareSummary);
-    public bool CanOpenPublishZip => !_isBusy && !string.IsNullOrWhiteSpace(_production.LastPublishPackagePath) && File.Exists(_production.LastPublishPackagePath);
+    public bool CanCopyShareSummary => !_isBusy && !string.IsNullOrWhiteSpace(_publishWorkflow.ShareSummary);
+    public bool CanOpenPublishZip => !_isBusy && !string.IsNullOrWhiteSpace(_publishWorkflow.LastPublishPackagePath) && File.Exists(_publishWorkflow.LastPublishPackagePath);
     public bool CanOpenComposeHealth => !_isBusy && File.Exists(GetComposeHealthPath());
     public bool IsOnboardingVisible => _onboarding.IsVisible;
     public TargetingLaunchViewModel Targeting => _targeting;
     public ProductionWorkspaceViewModel Production => _production;
+    public PublishWorkflowViewModel PublishWorkflow => _publishWorkflow;
+    public CaptureSessionViewModel CaptureSession => _captureSession;
     public ClipCurationViewModel Curation => _curation;
     public SessionStateViewModel SessionState => _sessionState;
     public OnboardingViewModel Onboarding => _onboarding;
@@ -1007,7 +981,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     public bool CanPauseClip => !_isBusy && _snapshot.State == RecorderSessionState.Recording;
 
     public bool CanStopSession
-        => _startClipInFlight
+        => _captureSession.IsStartClipInFlight
             || (!_isBusy && _snapshot.State is RecorderSessionState.Armed or RecorderSessionState.Recording or RecorderSessionState.Paused);
 
     public string Step1Background => _workflow.Step1Background;
@@ -1425,14 +1399,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 
     private void RecordOperationMetric(string operationName, TimeSpan elapsed)
     {
-        _performanceSummary = _performanceMetricsService.Record(operationName, elapsed);
-        if (string.Equals(operationName, "ComposeVideo", StringComparison.OrdinalIgnoreCase))
-        {
-            _composeLastRunText = $"Compose Last Run: {elapsed:mm\\:ss}";
-            OnPropertyChanged(nameof(ComposeLastRunText));
-        }
-
-        OnPropertyChanged(nameof(PerformanceSummary));
+        _healthMonitor.RecordOperationMetric(operationName, elapsed);
     }
 
 
@@ -1544,6 +1511,14 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         RaiseCommandState();
     }
 
+    private void OnHealthMonitorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(e.PropertyName))
+        {
+            OnPropertyChanged(e.PropertyName);
+        }
+    }
+
     private void OnLiveClipTimerTick(object? sender, EventArgs e)
     {
         if (_isDisposed)
@@ -1623,6 +1598,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         await CloseStageWorkspaceAsync();
 
         _captureWatchdogCoordinator.Dispose();
+        _healthMonitor.PropertyChanged -= OnHealthMonitorPropertyChanged;
         _onboarding.PropertyChanged -= OnOnboardingPropertyChanged;
         _history.PropertyChanged -= OnHistoryPropertyChanged;
         _targeting.PropertyChanged -= OnTargetingPropertyChanged;

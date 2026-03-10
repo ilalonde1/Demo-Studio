@@ -8,10 +8,10 @@ public sealed class DesktopStartupHealthService
     private readonly DesktopCaptureRuntime _captureRuntime;
     private readonly DesktopProcessRunner _processRunner;
 
-    public DesktopStartupHealthService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner? processRunner = null)
+    public DesktopStartupHealthService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner processRunner)
     {
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
-        _processRunner = processRunner ?? new DesktopProcessRunner();
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     }
 
     public async Task<DesktopStartupHealthReport> EvaluateAsync(CancellationToken cancellationToken = default)

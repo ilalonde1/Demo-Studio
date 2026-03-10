@@ -20,10 +20,7 @@ public sealed partial class MainWindowViewModel
         SetBusy(true);
         try
         {
-            _startCancellationRequested = false;
-            using var startFlowCts = CancellationTokenSource.CreateLinkedTokenSource(_lifecycleCancellation.Token);
-            _startClipCancellation = startFlowCts;
-            _startClipInFlight = true;
+            using var startFlowCts = _captureSession.BeginStartFlow(_lifecycleCancellation.Token);
             OnPropertyChanged(nameof(CanStopSession));
             RaiseCommandState();
 
@@ -64,22 +61,19 @@ public sealed partial class MainWindowViewModel
                 var targetSettings = BuildTargetSettings();
                 if (string.Equals(targetSettings.Mode, "Window", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (IsWindowMode && PresenterViewEnabled && _presenterViewService.TryMoveTargetToSecondary(targetSettings.WindowHandleHex))
-                    {
-                        _lastRuntimeMessage = "Presenter View: moved target to secondary monitor.";
-                        OnPropertyChanged(nameof(LastRuntimeMessage));
-                        await Task.Delay(200, startFlowCts.Token);
-                    }
-
-                    var focus = await _windowFocusService.TryActivateAsync(targetSettings);
-                    _lastRuntimeMessage = focus.Message;
-                    OnPropertyChanged(nameof(LastRuntimeMessage));
-                    if (!focus.Succeeded)
+                    if (!await _captureSession.TryActivateTargetAsync(
+                            IsWindowMode,
+                            PresenterViewEnabled,
+                            targetSettings,
+                            message =>
+                            {
+                                _lastRuntimeMessage = message;
+                                OnPropertyChanged(nameof(LastRuntimeMessage));
+                            },
+                            startFlowCts.Token))
                     {
                         return;
                     }
-
-                    await Task.Delay(250, startFlowCts.Token);
                 }
 
                 if (!await RunStartCountdownAsync(3, startFlowCts.Token))
@@ -87,7 +81,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
 
-                var captureStart = await _captureRuntime.EnsureStartedAsync(targetSettings, startFlowCts.Token);
+                var captureStart = await _captureSession.EnsureCaptureStartedAsync(targetSettings, startFlowCts.Token);
                 if (!captureStart.Succeeded)
                 {
                     EndLiveClipTracking();
@@ -95,12 +89,12 @@ public sealed partial class MainWindowViewModel
                         "DS-DESK-START-001",
                         captureStart.ErrorMessage ?? "Failed to start capture.",
                         null);
-                    _snapshot = _sessionEngine.StopFailed(failedReason);
+                    _snapshot = _captureSession.StopFailed(failedReason);
                     _lastRuntimeMessage = _snapshot.FailureReason ?? "Failed to start capture.";
                     await PersistFinalizedSessionToHistoryAsync(_snapshot, captureStart.RawVideoPath);
                     await RefreshSessionHistoryAsync();
                     await ClearDraftStateAsync();
-                    _snapshot = _sessionEngine.Reset();
+                    _snapshot = _captureSession.Reset();
                     _lastRuntimeMessage += " Session reset. Fix target/runtime issue and retry.";
                     RaiseWorkflowAndClipState();
                     return;
@@ -116,7 +110,7 @@ public sealed partial class MainWindowViewModel
             }
 
             _curation.ActiveClipLabel = NormalizeClipLabel(_snapshot.ClipCount + 1);
-            _snapshot = _sessionEngine.StartOrResumeClip();
+            _snapshot = _captureSession.StartOrResumeClip();
             BeginLiveClipTracking(_snapshot);
             RaiseWorkflowAndClipState();
         }
@@ -127,7 +121,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (OperationCanceledException)
         {
-            if (_startCancellationRequested)
+            if (_captureSession.IsStartCancellationRequested)
             {
                 _lastRuntimeMessage = "Recording start cancelled.";
                 OnPropertyChanged(nameof(LastRuntimeMessage));
@@ -135,7 +129,7 @@ public sealed partial class MainWindowViewModel
             }
 
             EndLiveClipTracking();
-            _snapshot = _sessionEngine.StopFailed(
+            _snapshot = _captureSession.StopFailed(
                 BuildFailureReason(
                     "DS-DESK-START-003",
                     "Capture startup was interrupted before completion.",
@@ -144,27 +138,25 @@ public sealed partial class MainWindowViewModel
             await PersistFinalizedSessionToHistoryAsync(_snapshot, null);
             await RefreshSessionHistoryAsync();
             await ClearDraftStateAsync();
-            _snapshot = _sessionEngine.Reset();
+            _snapshot = _captureSession.Reset();
             _lastRuntimeMessage += " Session reset. Retry after confirming target window is active.";
             RaiseWorkflowAndClipState();
         }
         catch (Exception ex)
         {
             EndLiveClipTracking();
-            _snapshot = _sessionEngine.StopFailed(BuildFailureReason("DS-DESK-START-002", $"Start clip failed: {ex.Message}", ex));
+            _snapshot = _captureSession.StopFailed(BuildFailureReason("DS-DESK-START-002", $"Start clip failed: {ex.Message}", ex));
             _lastRuntimeMessage = _snapshot.FailureReason ?? "Start clip failed.";
             await PersistFinalizedSessionToHistoryAsync(_snapshot, null);
             await RefreshSessionHistoryAsync();
             await ClearDraftStateAsync();
-            _snapshot = _sessionEngine.Reset();
+            _snapshot = _captureSession.Reset();
             _lastRuntimeMessage += " Session reset. Resolve error details and retry.";
             RaiseWorkflowAndClipState();
         }
         finally
         {
-            _startClipInFlight = false;
-            _startCancellationRequested = false;
-            _startClipCancellation = null;
+            _captureSession.CompleteStartFlow();
             OnPropertyChanged(nameof(CanStopSession));
             SetBusy(false);
             RecordOperationMetric("StartClip", stopwatch.Elapsed);
@@ -178,7 +170,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        _snapshot = _sessionEngine.PauseClip();
+        _snapshot = _captureSession.PauseClip();
         CaptureCompletedClipMetadata(_snapshot);
         EndLiveClipTracking();
         PromptForNextClipLabel();
@@ -227,10 +219,9 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        if (_startClipInFlight)
+        if (_captureSession.IsStartClipInFlight)
         {
-            _startCancellationRequested = true;
-            _startClipCancellation?.Cancel();
+            _captureSession.CancelPendingStart();
             _lastRuntimeMessage = "Cancelling recording start...";
             OnPropertyChanged(nameof(LastRuntimeMessage));
             return;
@@ -240,25 +231,25 @@ public sealed partial class MainWindowViewModel
         try
         {
             await StopTargetWatchdogAsync();
-            var stopResult = await _captureRuntime.StopAsync();
+            var stopResult = await _captureSession.StopCaptureAsync();
             EndLiveClipTracking();
             if (!stopResult.Succeeded)
             {
-                _snapshot = _sessionEngine.StopFailed(
+                _snapshot = _captureSession.StopFailed(
                     BuildFailureReason("DS-DESK-STOP-001", stopResult.ErrorMessage ?? "Capture stop failed.", null));
                 CaptureCompletedClipMetadata(_snapshot);
                 _lastRuntimeMessage = _snapshot.FailureReason ?? "Capture stop failed.";
                 await PersistFinalizedSessionToHistoryAsync(_snapshot, stopResult.RawVideoPath);
                 IsClipCurationExpanded = true;
                 await ClearDraftStateAsync();
-                _snapshot = _sessionEngine.Reset();
+                _snapshot = _captureSession.Reset();
                 _lastRuntimeMessage += " Open Clip Editor to review clips and build final video.";
                 await RefreshSessionHistoryAsync();
                 RaiseWorkflowAndClipState();
                 return;
             }
 
-            _snapshot = _sessionEngine.StopCompleted();
+            _snapshot = _captureSession.StopCompleted();
             CaptureCompletedClipMetadata(_snapshot);
             if (!string.IsNullOrWhiteSpace(stopResult.RawVideoPath))
             {
@@ -269,14 +260,14 @@ public sealed partial class MainWindowViewModel
             _ = GenerateMissingClipThumbnailsAsync(stopResult.RawVideoPath, _snapshot.SessionId);
             IsClipCurationExpanded = true;
             await ClearDraftStateAsync();
-            _snapshot = _sessionEngine.Reset();
+            _snapshot = _captureSession.Reset();
             _lastRuntimeMessage = "Capture process stopped. Open Clip Editor to reorder clips and build your final video.";
             await RefreshSessionHistoryAsync();
             RaiseWorkflowAndClipState();
         }
         catch (Exception ex)
         {
-            _snapshot = _sessionEngine.StopFailed(BuildFailureReason("DS-DESK-STOP-002", $"Stop session failed: {ex.Message}", ex));
+            _snapshot = _captureSession.StopFailed(BuildFailureReason("DS-DESK-STOP-002", $"Stop session failed: {ex.Message}", ex));
             EndLiveClipTracking();
             _lastRuntimeMessage = _snapshot.FailureReason ?? "Stop session failed.";
             RaiseWorkflowAndClipState();
@@ -288,199 +279,65 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private async Task RunSmokeCheckAsync()
-    {
-        var stopwatch = Stopwatch.StartNew();
-        if (!CanRunSmokeCheck)
-        {
-            return;
-        }
-
-        SetBusy(true);
-        try
-        {
-            _smokeCheckStatus = "Running smoke check...";
-            OnPropertyChanged(nameof(SmokeCheckStatus));
-            var result = await _smokeCheckService.RunAsync(3);
-            _smokeCheckStatus = result.Succeeded
-                ? $"{result.Message} Output: {result.OutputPath}"
-                : $"Smoke FAIL: {result.Message}";
-            _lastRuntimeMessage = _smokeCheckStatus;
-            OnPropertyChanged(nameof(SmokeCheckStatus));
-            OnPropertyChanged(nameof(LastRuntimeMessage));
-        }
-        catch (Exception ex)
-        {
-            _smokeCheckStatus = BuildFailureDisplay("DS-DESK-SMOKE-001", "Smoke check failed.", ex.Message);
-            _lastRuntimeMessage = _smokeCheckStatus;
-            OnPropertyChanged(nameof(SmokeCheckStatus));
-            OnPropertyChanged(nameof(LastRuntimeMessage));
-        }
-        finally
-        {
-            SetBusy(false);
-            RecordOperationMetric("SmokeCheck", stopwatch.Elapsed);
-        }
-    }
-
     private async Task<bool> RunStartCountdownAsync(int seconds, CancellationToken cancellationToken)
     {
-        if (seconds <= 0)
-        {
-            return true;
-        }
-
-        for (var remaining = seconds; remaining >= 1; remaining--)
-        {
-            if (cancellationToken.IsCancellationRequested)
+        return await _captureSession.RunStartCountdownAsync(
+            seconds,
+            cancellationToken,
+            message =>
             {
-                return false;
-            }
-
-            _lastRuntimeMessage = $"Recording starts in {remaining}...";
-            OnPropertyChanged(nameof(LastRuntimeMessage));
-            try
-            {
-                await Task.Delay(1000, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                return false;
-            }
-        }
-
-        return true;
+                _lastRuntimeMessage = message;
+                OnPropertyChanged(nameof(LastRuntimeMessage));
+            });
     }
 
     private string NormalizeClipLabel(int sequence)
     {
-        var candidate = NextClipLabel?.Trim();
-        return string.IsNullOrWhiteSpace(candidate) ? $"Clip {sequence}" : candidate;
+        return _captureSession.NormalizeClipLabel(sequence, NextClipLabel);
     }
 
     private void BeginLiveClipTracking(RecorderSessionSnapshot snapshot)
     {
-        if (snapshot.State != RecorderSessionState.Recording || snapshot.Clips.Count == 0)
-        {
-            return;
-        }
-
-        var activeClip = snapshot.Clips[^1];
-        var label = string.IsNullOrWhiteSpace(_curation.ActiveClipLabel) ? $"Clip {activeClip.Sequence}" : _curation.ActiveClipLabel!;
-        var existing = CurrentSessionClips.FirstOrDefault(x => x.Sequence == activeClip.Sequence);
-        if (existing is null)
-        {
-            existing = new CurrentSessionClipItem(
-                activeClip.Sequence,
-                label,
-                "00:00",
-                string.Empty,
-                Math.Max(0d, (activeClip.StartedUtc - snapshot.StartedUtc).TotalSeconds),
-                0d)
-            {
-                Order = CurrentSessionClips.Count + 1,
-                IncludeNarration = CaptureNarration
-            };
-            CurrentSessionClips.Add(existing);
-        }
-        else if (string.IsNullOrWhiteSpace(existing.Label))
-        {
-            existing.Label = label;
-        }
-
-        _curation.ActiveClipItem = existing;
-        _curation.ActiveClipStartedUtc = activeClip.StartedUtc;
-        if (!_liveClipTimer.IsEnabled)
-        {
-            _liveClipTimer.Start();
-        }
-
-        OnPropertyChanged(nameof(CurrentSessionClips));
+        _captureSession.BeginLiveClipTracking(
+            snapshot,
+            _curation,
+            CurrentSessionClips,
+            CaptureNarration,
+            _liveClipTimer,
+            () => OnPropertyChanged(nameof(CurrentSessionClips)));
     }
 
     private void UpdateLiveClipPreview()
     {
-        if (_snapshot.State != RecorderSessionState.Recording || _curation.ActiveClipItem is null)
-        {
-            return;
-        }
-
-        var elapsed = DateTimeOffset.UtcNow - _curation.ActiveClipStartedUtc;
-        if (elapsed < TimeSpan.Zero)
-        {
-            elapsed = TimeSpan.Zero;
-        }
-
-        _curation.ActiveClipItem.DurationSeconds = elapsed.TotalSeconds;
-        _curation.ActiveClipItem.DurationDisplay = elapsed.ToString(@"mm\:ss");
-        _curation.ActiveClipItem.TimelineWidth = Math.Clamp(120d + (_curation.ActiveClipItem.DurationSeconds * 8d), 120d, 420d);
+        _captureSession.UpdateLiveClipPreview(_snapshot, _curation);
     }
 
     private void EndLiveClipTracking()
     {
-        _curation.ActiveClipItem = null;
-        if (_liveClipTimer.IsEnabled)
-        {
-            _liveClipTimer.Stop();
-        }
+        _captureSession.EndLiveClipTracking(_curation, _liveClipTimer);
     }
 
     private void CaptureCompletedClipMetadata(RecorderSessionSnapshot snapshot)
     {
-        var changed = false;
-        foreach (var clip in snapshot.Clips)
-        {
-            var existing = CurrentSessionClips.FirstOrDefault(x => x.Sequence == clip.Sequence);
-            if (existing is not null)
+        _captureSession.CaptureCompletedClipMetadata(
+            snapshot,
+            _curation,
+            CurrentSessionClips,
+            CaptureNarration,
+            TryGenerateClipThumbnailAsync,
+            () => SelectedCurrentSessionClip,
+            clip => SelectedCurrentSessionClip = clip,
+            () =>
             {
-                existing.StartSeconds = (clip.StartedUtc - snapshot.StartedUtc).TotalSeconds;
-                existing.DurationSeconds = clip.Duration.TotalSeconds;
-                existing.DurationDisplay = clip.Duration.ToString(@"mm\:ss");
-                existing.TimelineWidth = Math.Clamp(120d + (existing.DurationSeconds * 8d), 120d, 420d);
-                _ = TryGenerateClipThumbnailAsync(existing);
-                if (_curation.ActiveClipItem is not null && _curation.ActiveClipItem.Sequence == existing.Sequence)
-                {
-                    _curation.ActiveClipLabel = null;
-                }
-                continue;
-            }
-
-            var label = _curation.ActiveClipLabel;
-            if (string.IsNullOrWhiteSpace(label))
-            {
-                label = $"Clip {clip.Sequence}";
-            }
-
-            CurrentSessionClips.Add(new CurrentSessionClipItem(
-                clip.Sequence,
-                label,
-                clip.Duration.ToString(@"mm\:ss"),
-                string.Empty,
-                (clip.StartedUtc - snapshot.StartedUtc).TotalSeconds,
-                clip.Duration.TotalSeconds));
-            CurrentSessionClips[^1].IncludeNarration = CaptureNarration;
-            _ = TryGenerateClipThumbnailAsync(CurrentSessionClips[^1]);
-            _curation.ActiveClipLabel = null;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            ReindexClipOrders();
-            if (SelectedCurrentSessionClip is null && CurrentSessionClips.Count > 0)
-            {
-                SelectedCurrentSessionClip = CurrentSessionClips[^1];
-            }
-        }
-
-        OnPropertyChanged(nameof(CurrentSessionClips));
-        OnPropertyChanged(nameof(CanMoveSelectedClipUp));
-        OnPropertyChanged(nameof(CanMoveSelectedClipDown));
+                OnPropertyChanged(nameof(CurrentSessionClips));
+                OnPropertyChanged(nameof(CanMoveSelectedClipUp));
+                OnPropertyChanged(nameof(CanMoveSelectedClipDown));
+            });
     }
 
     private void ReindexClipOrders()
     {
-        _clipCurationCoordinator.ReindexClipOrders(CurrentSessionClips);
+        _captureSession.ReindexClipOrders(CurrentSessionClips);
     }
 
     private async Task ExecutePrimaryWorkflowAsync()

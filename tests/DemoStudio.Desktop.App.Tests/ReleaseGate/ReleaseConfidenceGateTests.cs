@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Services;
+using DemoStudio.Desktop.App.Tests.Helpers;
 using DemoStudio.Desktop.App.ViewModels;
 using DemoStudio.Desktop.Core.Sessions;
 using DemoStudio.Desktop.Core.Time;
@@ -206,7 +207,7 @@ public sealed class ReleaseConfidenceGateTests
     [Trait("Gate", "ReleaseConfidence")]
     public async Task CountdownCancellation_ReturnsFalseQuickly()
     {
-        var vm = new MainWindowViewModel(new RecorderSessionEngine(new SystemClock()));
+        var vm = MainWindowViewModelTestBuilder.CreateMinimal();
         try
         {
             var method = typeof(MainWindowViewModel)

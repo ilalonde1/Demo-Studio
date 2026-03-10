@@ -5,7 +5,7 @@ using DemoStudio.Application.DTOs;
 using DemoStudio.Application.Requests;
 using DemoStudio.Domain.Entities;
 
-public sealed class DemoFlowService : IDemoFlowService
+public sealed class DemoFlowService : ApplicationServiceBase, IDemoFlowService
 {
     private readonly IDemoProjectRepository _projectRepository;
     private readonly IDemoFlowRepository _flowRepository;
@@ -62,14 +62,7 @@ public sealed class DemoFlowService : IDemoFlowService
 
         await _flowRepository.AddAsync(flow, cancellationToken);
 
-        try
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (ConcurrencyConflictException ex)
-        {
-            throw new InvalidOperationException("The flow could not be saved because related data changed during execution.", ex);
-        }
+        await ExecuteSaveAsync(() => _unitOfWork.SaveChangesAsync(cancellationToken), "flow");
 
         return new DemoFlowDto(
             flow.Id,

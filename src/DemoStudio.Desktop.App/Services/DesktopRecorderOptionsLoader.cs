@@ -53,6 +53,8 @@ public static class DesktopRecorderOptionsLoader
             // Falls back to defaults for reliability.
         }
 
+        // StorageRoot: if empty or null, DesktopCaptureRuntime computes the default path as:
+        // %LOCALAPPDATA%\DemoStudio\RecorderDesktop
         if (string.IsNullOrWhiteSpace(options.StorageRoot))
         {
             options.StorageRoot = BuildDefaultStorageRoot();

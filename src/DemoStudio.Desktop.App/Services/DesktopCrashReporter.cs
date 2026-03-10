@@ -46,8 +46,9 @@ public sealed class DesktopCrashReporter
             File.WriteAllText(path, json, Encoding.UTF8);
             return path ?? string.Empty;
         }
-        catch
+        catch (Exception)
         {
+            // Crash reporter must never throw — returning null signals write failure to callers.
             return null;
         }
     }

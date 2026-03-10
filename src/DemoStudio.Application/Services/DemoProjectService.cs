@@ -7,7 +7,7 @@ using DemoStudio.Application.Validation;
 using DemoStudio.Domain.Entities;
 using DemoStudio.Domain.ValueObjects;
 
-public sealed class DemoProjectService : IDemoProjectService
+public sealed class DemoProjectService : ApplicationServiceBase, IDemoProjectService
 {
     private readonly IDemoProjectRepository _projectRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -40,14 +40,7 @@ public sealed class DemoProjectService : IDemoProjectService
         var project = new DemoProject(command.Name, new ProjectCode(command.Code), command.Description);
         await _projectRepository.AddAsync(project, cancellationToken);
 
-        try
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (ConcurrencyConflictException ex)
-        {
-            throw new InvalidOperationException("The project could not be saved because it was changed by another operation.", ex);
-        }
+        await ExecuteSaveAsync(() => _unitOfWork.SaveChangesAsync(cancellationToken), "project");
 
         return ToDto(project);
     }

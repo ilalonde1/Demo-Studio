@@ -171,8 +171,10 @@ public sealed class DesktopWindowCatalogService
         {
             return System.Diagnostics.Process.GetProcessById((int)processId).ProcessName;
         }
-        catch
+        catch (Exception)
         {
+            // Process may have exited or access may be denied between window enumeration
+            // and name lookup. Returning "Unknown" is an intentional safe fallback.
             return "Unknown";
         }
     }

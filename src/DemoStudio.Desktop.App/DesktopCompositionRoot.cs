@@ -1,5 +1,6 @@
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.ViewModels;
+using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.Core.Sessions;
 using DemoStudio.Desktop.Core.Time;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,11 +18,19 @@ internal static class DesktopCompositionRoot
         services.AddSingleton<DesktopProcessRunner>();
         services.AddSingleton<RecorderSessionEngine>(_ => new RecorderSessionEngine(new SystemClock()));
         services.AddSingleton<DesktopCaptureRuntime>();
+        services.AddSingleton(sp =>
+        {
+            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
+            return new DesktopRuntimePaths(runtime.StorageRoot, runtime.FfmpegPath);
+        });
         services.AddSingleton<DesktopCaptureMediaCoordinator>();
         services.AddSingleton<DesktopNarrationCoordinator>();
         services.AddSingleton<DesktopCaptureWatchdogCoordinator>();
         services.AddSingleton<DesktopClipCurationCoordinator>();
         services.AddSingleton<DesktopDependencyHealthService>();
+        services.AddSingleton<HealthMonitorViewModel>();
+        services.AddSingleton<PublishWorkflowViewModel>();
+        services.AddSingleton<CaptureSessionViewModel>();
 
         services.AddSingleton<DesktopWindowCatalogService>();
         services.AddSingleton<DesktopTargetLauncher>();
@@ -38,48 +47,48 @@ internal static class DesktopCompositionRoot
 
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopRuntimeLogService(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopRuntimeLogService(paths.StorageRoot);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopCrashReporter(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopCrashReporter(paths.StorageRoot);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopLaunchProfileService(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopLaunchProfileService(paths.StorageRoot);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopSessionHistoryService(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopSessionHistoryService(paths.StorageRoot);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopDiagnosticsBundleService(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopDiagnosticsBundleService(paths.StorageRoot);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopSmokeCheckService(runtime.StorageRoot, runtime.FfmpegPath);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopSmokeCheckService(paths.StorageRoot, paths.FfmpegPath);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopOnboardingService(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopOnboardingService(paths.StorageRoot);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopDemoTemplateService(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopDemoTemplateService(paths.StorageRoot);
         });
         services.AddSingleton(sp =>
         {
-            var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-            return new DesktopSessionRecoveryService(runtime.StorageRoot);
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopSessionRecoveryService(paths.StorageRoot);
         });
         services.AddSingleton<DesktopStartupHealthService>();
 

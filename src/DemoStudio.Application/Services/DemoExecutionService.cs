@@ -9,7 +9,7 @@ using DemoStudio.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-public sealed class DemoExecutionService : IDemoExecutionService
+public sealed class DemoExecutionService : ApplicationServiceBase, IDemoExecutionService
 {
     private static readonly ConcurrentDictionary<Guid, RunExecutionLock> RunExecutionLocks = new();
 
@@ -206,14 +206,7 @@ public sealed class DemoExecutionService : IDemoExecutionService
 
     private async Task SaveChangesWithConcurrencyHandlingAsync(string operation, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (ConcurrencyConflictException ex)
-        {
-            throw new InvalidOperationException($"A concurrency conflict occurred while {operation}.", ex);
-        }
+        await ExecuteSaveAsync(() => _unitOfWork.SaveChangesAsync(cancellationToken), "concurrency conflict");
     }
 
     private sealed class RunExecutionLock : IDisposable
