@@ -17,10 +17,10 @@ public sealed class DesktopCaptureMediaCoordinator
     private readonly ConcurrentDictionary<string, int> _thumbnailGenerationAttempts = new(StringComparer.OrdinalIgnoreCase);
     private bool _ffmpegLaunchDisabled;
 
-    public DesktopCaptureMediaCoordinator(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner? processRunner = null)
+    public DesktopCaptureMediaCoordinator(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner processRunner)
     {
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
-        _processRunner = processRunner ?? new DesktopProcessRunner();
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _ffmpegLaunchDisabled = !_captureRuntime.IsFfmpegAvailable;
     }
 

@@ -252,7 +252,7 @@ public sealed class HealthMonitorViewModel : INotifyPropertyChanged
 
     private TelemetrySnapshot CollectTelemetrySnapshot(RecorderSessionState sessionState, string? lastOutputPath)
     {
-        using var process = Process.GetCurrentProcess();
+        var process = Process.GetCurrentProcess();
         process.Refresh();
         var workingSetMb = process.WorkingSet64 / 1024d / 1024d;
         var privateMb = process.PrivateMemorySize64 / 1024d / 1024d;

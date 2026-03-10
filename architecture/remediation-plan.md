@@ -1,718 +1,608 @@
 # Safe Incremental Remediation Plan
-**DemoStudio App Demo Maker — Based on Forensic Audit**
+**DemoStudio App Demo Maker — Phases 5–9 (Post-Phase-4 Audit)**
 **Date**: 2026-03-09
 
 > READ-ONLY PLANNING DOCUMENT. No code is modified here.
 > Each step compiles independently. Each step is independently reversible.
-> Corrections from live code read-back are noted where the audit was inaccurate.
+> Phases 1–4 are complete. This document covers the remaining audit findings only.
 
 ---
 
-## Pre-Plan Corrections (from reading actual source)
+## Completed Phases (summary)
 
-Two audit findings were **inaccurate** and are removed from this plan:
-
-| Audit Finding | Actual State | Action |
+| Phase | Title | Status |
 |---|---|---|
-| "Missing index on `DemoRun.Status`" | `DemoRunConfiguration.cs:43–44` already has `HasIndex(x => x.Status)` and `HasIndex(x => x.QueuedAtUtc)` | **Removed from plan** |
-| "Single-arg constructor is dead code" | `ReleaseConfidenceGateTests.cs:209` calls `new MainWindowViewModel(new RecorderSessionEngine(...))` | **Requires test migration before constructor removal** |
+| 1 | Stabilization (bare catches, scaffolding, crash reporter) | ✅ Done |
+| 2 | DI Cleanup (constructor hardening, test builder, optional params) | ✅ Done |
+| 3 | Config Centralization (DesktopRuntimePaths, DesktopStoragePaths) | ✅ Done |
+| 4 | ViewModel Decomposition (HealthMonitor, PublishWorkflow, CaptureSession) | ✅ Done |
 
 ---
 
 ## Execution Rules
 
 1. **Never batch phases.** Complete and verify each step before starting the next.
-2. **Build gate**: Every step ends with `dotnet build` passing clean before committing.
-3. **Test gate**: Every step ends with `dotnet test` passing clean before committing.
-4. **One commit per step.** This makes each step independently revertable with `git revert`.
-5. **Phase 4 steps are blocked until Phase 2 is complete.** ViewModel decomposition is only safe once the constructor is clean.
-6. **Read each affected partial class fully** before starting any Phase 4 step — cross-partial state access is the main decomposition risk.
-7. **Do not begin Step 2.4 before Step 2.3 is committed and tested** — the test must use the builder before the constructor signature changes.
+2. **Build gate**: `dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental` passes clean.
+3. **Test gate**: `dotnet test DemoStudio.Desktop.sln -m:1` passes all 34 tests.
+4. **One commit per step.** Each step is independently revertable with `git revert`.
+5. **Read each affected file fully** before starting any step — cross-file state access is the main risk.
 
 ---
 
-## Phase 1 — Stabilization
+## Phase 5 — Reliability Fixes
 
-*Safe, isolated, zero-risk changes. No behavior changes.*
+**Goal**: Eliminate the highest-severity runtime risks identified in the audit. All steps in this
+phase are narrow, surgical, and carry zero behavior-change risk. Reliability fixes first,
+architectural refactors later.
+
+**Rationale**: Two findings are active defects (not just code quality issues): the
+`Process.GetCurrentProcess()` dispose bug corrupts the process handle for the lifetime of the
+application, and the dead DI registrations silently waste container memory and mislead future
+readers. The `?? new DesktopProcessRunner()` fallbacks are a latent risk that becomes a real
+defect the moment a test or alternate composition root tries to substitute a different runner.
+All four steps in this phase are isolated, individually revertable, and independent of each other.
 
 ---
 
-### Step 1.1 — Delete placeholder Class1.cs scaffolding files
+### Step 5.1 — Fix `Process.GetCurrentProcess()` disposal in `HealthMonitorViewModel`
 
-**Goal**: Remove leftover scaffolding residue from project templates.
+**File affected**: `src/DemoStudio.Desktop.App/ViewModels/HealthMonitorViewModel.cs`
+
+**Finding**: `CollectTelemetrySnapshot` (line ~216) uses `using var process = Process.GetCurrentProcess()`.
+`Process.GetCurrentProcess()` returns a handle to the running process itself. Disposing it calls
+`CloseHandle` on the pseudo-handle, setting the underlying handle to `IntPtr.Zero`. Any subsequent
+call to `Process.Handle`, `Process.WorkingSet64`, or `Process.Refresh()` on the same process
+object — or any new call to `Process.GetCurrentProcess()` — will fail or return stale data
+for the remainder of the application lifetime. This is a documented .NET footgun.
+
+**Exact change**: Remove the `using` keyword. Keep the `Refresh()` call.
+
+```csharp
+// Before:
+using var process = Process.GetCurrentProcess();
+process.Refresh();
+
+// After:
+var process = Process.GetCurrentProcess();
+process.Refresh();
+```
+
+**Why it is safe**: `Process.GetCurrentProcess()` always returns a fresh view of the current
+process. Not disposing it is correct here — the handle is owned by the runtime, not by this
+method. `Refresh()` is still called to clear cached property values. Zero behavior change for
+callers.
+
+**Verification**:
+```
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
+```
+
+---
+
+### Step 5.2 — Harden the four `?? new DesktopProcessRunner()` DI fallbacks
+
+**Finding**: Four services accept an optional `DesktopProcessRunner` parameter and silently
+self-instantiate a second runner if DI does not inject one. `DesktopProcessRunner` is registered
+as a singleton in `DesktopCompositionRoot`. The fallback creates an invisible second instance with
+no way to intercept, stub, or observe it. This is the same pattern corrected in Step 1.3 for
+`DesktopStartupHealthService`.
 
 **Files affected**:
 ```
-src/DemoStudio.Automation.Abstractions/Class1.cs
-src/DemoStudio.Automation.FlaUI/Class1.cs
-src/DemoStudio.Capture.Abstractions/Class1.cs
-src/DemoStudio.Desktop.Core/Class1.cs
-src/DemoStudio.Domain/Class1.cs
-src/DemoStudio.Infrastructure/Class1.cs
-src/DemoStudio.Redaction.Abstractions/Class1.cs
+src/DemoStudio.Desktop.App/Services/DesktopCaptureMediaCoordinator.cs
+src/DemoStudio.Desktop.App/Services/DesktopDependencyHealthService.cs
+src/DemoStudio.Desktop.App/Services/DesktopNarrationCoordinator.cs
+src/DemoStudio.Desktop.App/Services/DesktopTargetLauncher.cs
 ```
 
-**Exact change**: Delete all 7 files. They contain only the auto-generated empty `class Class1 {}` stub.
-
-**Why it is safe**: Run a full solution-wide grep for `Class1` before deleting. If no references exist (expected), deletion is zero-risk. These files are not referenced by any type, namespace import, or DI registration.
-
-**Verification**:
-```
-dotnet build
-dotnet test
-```
-Expected: clean build, all tests green, no reference errors.
-
----
-
-### Step 1.2 — Type the bare `catch` in `DesktopWindowCatalogService.GetProcessName`
-
-**Goal**: Change a bare `catch` (which suppresses all exceptions including `ThreadAbortException`, `OutOfMemoryException`) to an explicit typed catch. Add a comment explaining intent.
-
-**File affected**: `src/DemoStudio.Desktop.App/Services/DesktopWindowCatalogService.cs:169–177`
-
-**Current code**:
+**Pattern in each file** (exact line numbers will vary — read each file before editing):
 ```csharp
-private static string GetProcessName(uint processId)
+// Before (optional param with fallback):
+public SomeService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner? processRunner = null)
 {
-    try
-    {
-        return System.Diagnostics.Process.GetProcessById((int)processId).ProcessName;
-    }
-    catch
-    {
-        return "Unknown";
-    }
-}
-```
-
-**Exact change**:
-```csharp
-private static string GetProcessName(uint processId)
-{
-    try
-    {
-        return System.Diagnostics.Process.GetProcessById((int)processId).ProcessName;
-    }
-    catch (Exception)
-    {
-        // Process may have exited or access may be denied between window enumeration
-        // and name lookup. Returning "Unknown" is an intentional safe fallback.
-        return "Unknown";
-    }
-}
-```
-
-**Why it is safe**: Functionally identical. `catch (Exception)` catches everything a bare `catch` would catch in managed code. Zero behavior change.
-
-**Verification**:
-```
-dotnet build
-dotnet test
-```
-
----
-
-### Step 1.3 — Make `DesktopProcessRunner` required in `DesktopStartupHealthService`
-
-**Goal**: Remove the `?? new DesktopProcessRunner()` fallback that silently bypasses DI. `DesktopProcessRunner` is already registered in `DesktopCompositionRoot` as a singleton (line 17), so DI always injects it. The fallback creates an undocumented second instance if DI fails.
-
-**File affected**: `src/DemoStudio.Desktop.App/Services/DesktopStartupHealthService.cs:11–15`
-
-**Current code**:
-```csharp
-public DesktopStartupHealthService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner? processRunner = null)
-{
-    _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
     _processRunner = processRunner ?? new DesktopProcessRunner();
 }
-```
 
-**Exact change**:
-```csharp
-public DesktopStartupHealthService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner processRunner)
+// After (required param with null guard):
+public SomeService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner processRunner)
 {
-    _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
     _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
 }
 ```
 
-**Why it is safe**:
-- `DesktopProcessRunner` is registered at `DesktopCompositionRoot.cs:17`. DI resolves it automatically.
-- `DesktopStartupHealthService` is registered at `DesktopCompositionRoot.cs:84` using type-based resolution.
-- No test file instantiates `DesktopStartupHealthService` directly (confirmed by reviewing all test files).
+**Pre-change check for each file**: Grep the entire solution for `new DesktopXxxService(` and
+`new DesktopXxxCoordinator(` to find any call site that omits `processRunner`. If a call site
+exists outside `DesktopCompositionRoot`, update it first (or update `MainWindowViewModelTestBuilder`
+if it is a test call site).
 
-**Pre-change verification**: Grep for `new DesktopStartupHealthService` in the solution. If any call site omits `processRunner`, update it first.
+**Why it is safe**: `DesktopProcessRunner` is registered as a singleton. All four services are
+registered in `DesktopCompositionRoot` using type-based resolution, so DI supplies the runner
+automatically. `MainWindowViewModelTestBuilder.CreateMinimal()` already passes `processRunner`
+explicitly to every coordinator it creates — confirm this covers all four services before committing.
 
-**Verification**:
+**Do each service as a sub-step with its own build/test gate**:
+- Step 5.2a — `DesktopCaptureMediaCoordinator`
+- Step 5.2b — `DesktopDependencyHealthService`
+- Step 5.2c — `DesktopNarrationCoordinator`
+- Step 5.2d — `DesktopTargetLauncher`
+
+**Verification after each sub-step**:
 ```
-dotnet build
-dotnet test
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 1.4 — Type the bare `catch` in `DesktopCrashReporter.TryWrite`
+### Step 5.3 — Remove the three dead DI singleton registrations
 
-**Goal**: Same pattern as Step 1.2. The crash reporter swallows all exceptions silently.
+**Finding**: `DesktopCompositionRoot.cs` registers `HealthMonitorViewModel`,
+`PublishWorkflowViewModel`, and `CaptureSessionViewModel` as singletons (lines 31–33). All three
+are instantiated via `new` inside `MainWindowViewModel`'s constructor and never resolved from the
+container. The registrations are dead code — they waste container memory and mislead future readers
+into believing these ViewModels are container-managed.
 
-**File affected**: Locate `DesktopCrashReporter.cs` — find the `TryWrite` method.
+**File affected**: `src/DemoStudio.Desktop.App/DesktopCompositionRoot.cs`
 
-**Exact change**: Replace any bare `catch { return null; }` with:
+**Pre-change check**: Grep the entire solution for
+`GetRequiredService<HealthMonitorViewModel>`,
+`GetRequiredService<PublishWorkflowViewModel>`,
+`GetRequiredService<CaptureSessionViewModel>`,
+`GetService<HealthMonitorViewModel>`,
+and `provider.GetRequiredService` variants. Confirm zero resolution call sites exist.
+
+**Two valid resolutions** — choose one and note the choice in the commit message:
+
+**Option A (remove)**: Delete the three `AddSingleton` lines. `MainWindowViewModel` continues to
+construct them via `new` as today.
+
+**Option B (resolve from DI)**: Keep the registrations. Change `MainWindowViewModel`'s constructor
+to accept all three as injected parameters instead of instantiating them with `new`. This is the
+cleaner long-term path and aligns with the Phase 4 decomposition intent, but requires updating
+`MainWindowViewModelTestBuilder` as well.
+
+**Recommendation**: Start with Option A (safer, zero risk). Option B can follow as a separate
+Phase 5 step once Option A is verified.
+
+**Option A — Exact change**: Remove these three lines from `DesktopCompositionRoot.cs`:
 ```csharp
+services.AddSingleton<HealthMonitorViewModel>();       // line 31
+services.AddSingleton<PublishWorkflowViewModel>();     // line 32
+services.AddSingleton<CaptureSessionViewModel>();      // line 33
+```
+
+**Why it is safe**: Removing a registration that is never resolved has zero runtime impact.
+No `GetRequiredService` call references these types, so removal cannot throw.
+
+**Verification**:
+```
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
+```
+
+---
+
+### Step 5.4 — Type the bare catch blocks in `DesktopVideoComposeService`
+
+**Finding**: At least seven bare `catch { }` or `catch (Exception) { }` blocks in
+`DesktopVideoComposeService` swallow exceptions silently with no log, no metric, and no error
+propagation. In a compose pipeline this means a corrupt or stale output can be produced with no
+observable signal.
+
+**File affected**: `src/DemoStudio.Desktop.App/Services/DesktopVideoComposeService.cs`
+
+**Approach**: Read the full file first. For each silent catch block:
+1. If the failure is genuinely best-effort (e.g., cache pruning, temp directory cleanup), change
+   `catch { }` to `catch (Exception)` and add a `// Best-effort: ...` comment explaining what
+   is being swallowed and why it is safe to swallow.
+2. If the failure is on a critical path (file existence check feeding into a compose decision),
+   consider whether swallowing is correct — document the decision explicitly as a comment.
+
+**Pattern for each block**:
+```csharp
+// Before:
+catch { }
+
+// After:
 catch (Exception)
 {
-    // Crash reporter must never throw — returning null signals write failure to callers.
-    return null;
+    // Best-effort [operation name]. If this fails the [consequence] is [safe fallback].
+    // Intentionally not rethrown — callers observe [state/return value] instead.
 }
 ```
 
-**Why it is safe**: Functionally identical. Purely cosmetic typing improvement.
+**Do not add logging yet** (that is Phase 6 territory). This step only adds typing and comments.
+
+**Why it is safe**: `catch (Exception)` catches everything a bare `catch { }` catches in managed
+code. This is a zero-behavior-change documentation improvement.
 
 **Verification**:
 ```
-dotnet build
-dotnet test
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 1.5 — Extract `ConcurrencyConflictException` translation to a shared base class
+## Phase 6 — DI Boundary Enforcement for Self-Instantiating Services
 
-**Goal**: Remove the repeated 3-line pattern across `DemoProjectService`, `DemoFlowService`, and `DemoExecutionService`.
+**Goal**: Eliminate the two services that construct their own collaborators inside method bodies,
+making them untestable and impossible to substitute.
 
-**Current pattern** (identical in all 3 files):
-```csharp
-catch (ConcurrencyConflictException ex)
-{
-    throw new InvalidOperationException("...", ex);
-}
-```
+**Rationale**: `DesktopCaptureRuntime.BuildCaptureService()` and `DesktopSmokeCheckService.RunAsync()`
+both call `new FfmpegVideoCaptureService(new ProcessLauncher(), new LocalFileStorage(), ...)` inside
+method bodies. This makes it impossible to inject a stub or test double. The pattern mirrors the
+DI fallback problem in Phase 2/5 but is more severe — there is no fallback path at all, the method
+*always* self-instantiates. This phase enforces the DI boundary across the capture runtime stack.
 
-**New file**: `src/DemoStudio.Application/Services/ApplicationServiceBase.cs`
+---
 
-```csharp
-namespace DemoStudio.Application.Services;
+### Step 6.1 — Inject a capture service factory into `DesktopCaptureRuntime`
 
-internal abstract class ApplicationServiceBase
-{
-    protected static async Task ExecuteSaveAsync(Func<Task> saveOperation, string context)
-    {
-        try
-        {
-            await saveOperation();
-        }
-        catch (ConcurrencyConflictException ex)
-        {
-            throw new InvalidOperationException(
-                $"The {context} could not be saved because related data changed during execution.", ex);
-        }
-    }
-}
-```
+**File affected**: `src/DemoStudio.Desktop.App/Services/DesktopCaptureRuntime.cs`
 
-**Files to update after adding base class**:
-- `DemoProjectService.cs` — extend `ApplicationServiceBase`, call `ExecuteSaveAsync`
-- `DemoFlowService.cs` — same
-- `DemoExecutionService.cs` — same
+**Finding**: `BuildCaptureService()` (locate the method — it instantiates `ProcessLauncher`,
+`LocalFileStorage`, `FfmpegVideoCaptureService` directly). This tightly couples the runtime to
+a specific implementation and makes unit testing impossible.
 
-**Why it is safe**: `internal abstract` base class. No public API surface change.
+**Approach**:
+1. Read `DesktopCaptureRuntime.cs` fully before making any change.
+2. Define a `Func<IVideoCaptureService>` factory delegate parameter in the constructor, or accept
+   an `IVideoCaptureServiceFactory` if one already exists.
+3. Replace the inline `new` chain in `BuildCaptureService()` with a call to the injected factory.
+4. Register the factory lambda in `DesktopCompositionRoot` to keep production behavior identical.
+5. Update `MainWindowViewModelTestBuilder` to supply a no-op factory.
 
-**Pre-change verification**: Grep for the exact exception message strings in test files. If tests assert the exact text, keep the original message text per-service and only extract the try/catch structure.
+**Pre-step check**: Read `DesktopCaptureRuntime.cs` and the capture abstractions project to
+determine whether `IVideoCaptureServiceFactory` already exists. If it does, use it. If not,
+a `Func<IVideoCaptureService>` delegate is sufficient for this step.
 
 **Verification**:
 ```
-dotnet build
-dotnet test
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-## Phase 2 — Dependency Injection Cleanup
+### Step 6.2 — Inject capture service dependencies into `DesktopSmokeCheckService`
 
-*Enforcing DI boundaries. Steps must be executed sequentially — each step unlocks the next.*
+**File affected**: `src/DemoStudio.Desktop.App/Services/DesktopSmokeCheckService.cs`
 
----
+**Finding**: `RunAsync()` calls `new FfmpegVideoCaptureService(new ProcessLauncher(), new LocalFileStorage(), new NullWindowLocator())` inside the method body. Because `RunAsync` is the only public method, this makes the entire service untestable — any test would run real FFmpeg.
 
-### Step 2.1 — Mark the single-arg constructor `[Obsolete]` and document its test-only role
+**Approach**:
+1. Read `DesktopSmokeCheckService.cs` fully.
+2. Accept the same `Func<IVideoCaptureService>` factory (or the concrete service directly if
+   a factory is too heavy) as a constructor parameter.
+3. Replace the inline instantiation with the injected dependency.
+4. Register via the factory lambda in `DesktopCompositionRoot`.
+5. Update `MainWindowViewModelTestBuilder` to supply a stub.
 
-**Goal**: Communicate intent without any code change risk. The single-arg constructor at `MainWindowViewModel.cs:110` is **not** used by the DI container (which picks the full constructor). Document this explicitly before removing it.
-
-**File affected**: `src/DemoStudio.Desktop.App/ViewModels/MainWindowViewModel.cs:110`
-
-**Exact change**:
-```csharp
-/// <summary>
-/// Convenience constructor for tests that only need a minimal ViewModel instance.
-/// Production DI uses the full constructor. This constructor creates services with
-/// hardcoded default paths and empty configuration — not suitable for production use.
-/// </summary>
-[Obsolete("Test-only. Production DI resolves via the full constructor. " +
-          "Migrate tests to MainWindowViewModelTestBuilder before removing.")]
-public MainWindowViewModel(RecorderSessionEngine sessionEngine)
-    : this(...)
-```
-
-**Why it is safe**: Adding `[Obsolete]` generates compiler warnings but does not break anything. The one known test caller at `ReleaseConfidenceGateTests.cs:209` will emit a warning, which is intentional — it signals the migration needed in Step 2.2.
+**Why this step must follow Step 6.1**: Both services need the same factory contract. Agree on the
+factory pattern in Step 6.1 before applying it to the smoke check service.
 
 **Verification**:
 ```
-dotnet build   # expect 1 CS0618 warning from ReleaseConfidenceGateTests.cs:209
-dotnet test    # all tests still pass
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 2.2 — Create `MainWindowViewModelTestBuilder` in the test project
+## Phase 7 — Path Construction Centralization
 
-**Goal**: Replace the dependency on the single-arg constructor with a controlled test factory. This unblocks removing the constructor in Step 2.3.
+**Goal**: Eliminate the duplicated `Path.Combine(StorageRoot, "curated")` and related sub-path
+formulas scattered across at least five files. Establish `DesktopStoragePaths` as the single
+canonical source for all well-known sub-paths under the storage root.
 
-**New file**: `tests/DemoStudio.Desktop.App.Tests/Helpers/MainWindowViewModelTestBuilder.cs`
+**Rationale**: `DesktopStoragePaths` was created in Phase 3 to centralize the root path formula
+(`%LOCALAPPDATA%\DemoStudio\RecorderDesktop`). The audit found the sub-path formulas — `curated`,
+`narration`, `previews`, `thumbnails`, `compose-cache`, `compose-telemetry.jsonl`, `publish` — are
+still duplicated inline. Each duplication is a divergence risk: if the folder layout changes, every
+inline occurrence must be found and updated.
+
+---
+
+### Step 7.1 — Extend `DesktopStoragePaths` with sub-path helpers
+
+**File affected**: `src/DemoStudio.Desktop.App/Infrastructure/DesktopStoragePaths.cs`
+
+**Exact additions** (do not remove any existing members):
 
 ```csharp
-using DemoStudio.Desktop.App.Services;
-using DemoStudio.Desktop.App.ViewModels;
-using DemoStudio.Desktop.Core.Sessions;
-using DemoStudio.Desktop.Core.Time;
-using DemoStudio.Infrastructure.Options;
+/// <summary>Returns the curated output directory for a given raw video file path.</summary>
+public static string GetCuratedDirectory(string rawVideoPath) =>
+    Path.Combine(Path.GetDirectoryName(rawVideoPath)
+        ?? throw new ArgumentException("Path has no directory.", nameof(rawVideoPath)),
+        "curated");
 
-namespace DemoStudio.Desktop.App.Tests.Helpers;
+/// <summary>Returns the narration directory for a session under the storage root.</summary>
+public static string GetNarrationDirectory(string storageRoot, Guid sessionId) =>
+    Path.Combine(storageRoot, "narration", sessionId.ToString("N"));
 
-/// <summary>
-/// Builds a minimally configured MainWindowViewModel for unit tests.
-/// All services are real instances using temp paths.
-/// If the constructor signature changes, this builder will fail to compile — update it first.
-/// </summary>
-internal static class MainWindowViewModelTestBuilder
-{
-    public static MainWindowViewModel CreateMinimal(string? tempRoot = null)
-    {
-        var root = tempRoot ?? Path.Combine(Path.GetTempPath(),
-            "demostudio-vmtest", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+/// <summary>Returns the previews directory for a session key under the storage root.</summary>
+public static string GetPreviewsDirectory(string storageRoot, string sessionKey) =>
+    Path.Combine(storageRoot, "previews", sessionKey);
 
-        var options = new DesktopRecorderOptions
-        {
-            StorageRoot = root,
-            Capture = new FfmpegCaptureOptions { FfmpegPath = "ffmpeg" }
-        };
+/// <summary>Returns the thumbnails directory for a session key under the storage root.</summary>
+public static string GetThumbnailsDirectory(string storageRoot, string sessionKey) =>
+    Path.Combine(storageRoot, "thumbnails", sessionKey);
 
-        var sessionEngine  = new RecorderSessionEngine(new SystemClock());
-        var processRunner  = new DesktopProcessRunner();
-        var captureRuntime = new DesktopCaptureRuntime(options);
+/// <summary>Returns the compose cache directory for a curated directory.</summary>
+public static string GetComposeCacheDirectory(string curatedDirectory) =>
+    Path.Combine(curatedDirectory, "compose-cache");
 
-        return new MainWindowViewModel(
-            sessionEngine:              sessionEngine,
-            captureRuntime:             captureRuntime,
-            windowCatalogService:       new DesktopWindowCatalogService(),
-            launchProfileService:       new DesktopLaunchProfileService(root),
-            targetLauncher:             new DesktopTargetLauncher(),
-            preflightService:           new DesktopCapturePreflightService(),
-            windowFocusService:         new DesktopWindowFocusService(),
-            sessionHistoryService:      new DesktopSessionHistoryService(root),
-            diagnosticsBundleService:   new DesktopDiagnosticsBundleService(root),
-            performanceMetricsService:  new DesktopPerformanceMetricsService(),
-            smokeCheckService:          new DesktopSmokeCheckService(root, "ffmpeg"),
-            composeManifestService:     new DesktopComposeManifestService(),
-            videoComposeService:        new DesktopVideoComposeService(new NoOpProcessLauncher()),
-            publishPackageService:      new DesktopPublishPackageService(new NoOpProcessLauncher()),
-            onboardingService:          new DesktopOnboardingService(root),
-            demoTemplateService:        new DesktopDemoTemplateService(root),
-            sessionRecoveryService:     new DesktopSessionRecoveryService(root),
-            presenterViewService:       new DesktopPresenterViewService(),
-            processRunner:              processRunner,
-            captureMediaCoordinator:    new DesktopCaptureMediaCoordinator(captureRuntime, processRunner),
-            narrationCoordinator:       new DesktopNarrationCoordinator(captureRuntime,
-                                            new DesktopClipNarrationService(),
-                                            new DesktopAiNarrationService(),
-                                            processRunner),
-            captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(),
-            clipCurationCoordinator:    new DesktopClipCurationCoordinator(),
-            dependencyHealthService:    new DesktopDependencyHealthService(captureRuntime, processRunner),
-            ffmpegOperationQueue:       new DesktopFfmpegOperationQueue());
-    }
-}
+/// <summary>Returns the compose telemetry log path for a curated directory.</summary>
+public static string GetComposeTelemetryPath(string curatedDirectory) =>
+    Path.Combine(curatedDirectory, "compose-telemetry.jsonl");
+
+/// <summary>Returns the compose health snapshot path for a curated directory.</summary>
+public static string GetComposeHealthPath(string curatedDirectory) =>
+    Path.Combine(curatedDirectory, "compose-health.json");
+
+/// <summary>Returns the publish output directory under the storage root.</summary>
+public static string GetPublishDirectory(string storageRoot) =>
+    Path.Combine(storageRoot, "publish");
 ```
 
-**Why it is safe**: New file in the test project only. Production code is untouched. Acts as a compile-time canary — if the constructor signature changes, this file fails to compile, preventing silent drift.
+**Why it is safe**: Additive only. No existing code is touched. All helpers are pure functions.
+Zero behavioral change.
 
 **Verification**:
 ```
-dotnet build   # no new errors
-dotnet test    # all tests still pass (new class not yet used)
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 2.3 — Migrate the one test that uses the single-arg constructor
+### Step 7.2 — Update `DesktopVideoComposeService` to use centralized path helpers
 
-**Goal**: Update `ReleaseConfidenceGateTests.cs` to use `MainWindowViewModelTestBuilder.CreateMinimal()` instead of the single-arg constructor directly.
+**File affected**: `src/DemoStudio.Desktop.App/Services/DesktopVideoComposeService.cs`
 
-**File affected**: `tests/DemoStudio.Desktop.App.Tests/ReleaseGate/ReleaseConfidenceGateTests.cs:209`
+**Pre-step**: Read the file fully and map every inline `Path.Combine` call. Replace each one with
+the corresponding `DesktopStoragePaths` helper from Step 7.1. Do not rename local variables or
+change any logic — only replace path-building expressions.
 
-**Current code**:
+**Do each replaced formula as a reviewable comment in the diff** so reviewers can confirm the
+output path is identical:
 ```csharp
-var vm = new MainWindowViewModel(new RecorderSessionEngine(new SystemClock()));
+// Before: Path.Combine(rawDirectory, "curated")
+// After:  DesktopStoragePaths.GetCuratedDirectory(rawVideoPath)
 ```
-
-**Exact change**:
-```csharp
-// Add using at top of file:
-using DemoStudio.Desktop.App.Tests.Helpers;
-
-// Replace the instantiation:
-var vm = MainWindowViewModelTestBuilder.CreateMinimal();
-```
-
-**Why it is safe**: `CreateMinimal()` produces a ViewModel that behaves identically for this test. The test only calls `RunStartCountdownAsync` via reflection — a pure countdown timer unaffected by service configuration.
 
 **Verification**:
 ```
-dotnet test --filter "CountdownCancellation_ReturnsFalseQuickly"
-dotnet test   # full suite
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
-Expected: same result (false, elapsed < 1s), zero regression.
 
 ---
 
-### Step 2.4 — Remove the single-arg constructor from `MainWindowViewModel`
+### Step 7.3 — Update remaining consumers to use centralized path helpers
 
-**Goal**: Remove the constructor that creates 18+ services with hardcoded defaults, now that no caller uses it.
+**Files affected** (read each before editing):
+```
+src/DemoStudio.Desktop.App/Services/DesktopNarrationCoordinator.cs
+src/DemoStudio.Desktop.App/Services/DesktopCaptureMediaCoordinator.cs
+src/DemoStudio.Desktop.App/ViewModels/PublishWorkflowViewModel.cs
+```
 
-**File affected**: `src/DemoStudio.Desktop.App/ViewModels/MainWindowViewModel.cs:110–133`
+**Same approach as Step 7.2**: find every inline `Path.Combine` that matches a known sub-path
+pattern and replace with the helper. One file at a time, one build/test gate per file.
 
-**Pre-change check**: Grep the entire solution for `new MainWindowViewModel(` — confirm zero references remain after Step 2.3.
+**Sub-steps**:
+- Step 7.3a — `DesktopNarrationCoordinator` (narration sub-paths)
+- Step 7.3b — `DesktopCaptureMediaCoordinator` (previews, thumbnails sub-paths)
+- Step 7.3c — `PublishWorkflowViewModel` (publish, compose-health sub-paths)
 
-**Exact change**: Delete lines 110–133 inclusive (the entire single-arg constructor and its XML doc comment).
+**Verification after each sub-step**:
+```
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
+```
 
-**Why it is safe**:
-- `DesktopCompositionRoot` has always resolved via the full constructor (DI picks it by parameter count).
-- The only test caller was migrated in Step 2.3.
-- The full constructor is unchanged.
+---
+
+## Phase 8 — `DesktopVideoComposeService` Decomposition
+
+**Goal**: Break the 993-line, five-responsibility `DesktopVideoComposeService` into focused,
+independently testable components.
+
+**Rationale**: The service currently owns: (1) FFmpeg orchestration, (2) compose-cache management
+and pruning, (3) file-signature hashing for cache invalidation, (4) telemetry JSONL writing, and
+(5) compose-health snapshot writing. None of these are testable in isolation because they are all
+embedded in one class. After Phase 7 centralizes the paths, the responsibility boundaries become
+clean enough to extract.
+
+**Blocked until**: Phase 7 is fully complete and all tests are green. Path centralization is a
+prerequisite — without it, the extracted classes would immediately re-introduce the duplication.
+
+---
+
+### Step 8.1 — Extract `DesktopComposeTelemetryWriter`
+
+**New file**: `src/DemoStudio.Desktop.App/Services/DesktopComposeTelemetryWriter.cs`
+
+**Responsibility**: Append telemetry entries to the `compose-telemetry.jsonl` file in a curated
+directory. This is pure I/O with no FFmpeg dependency.
+
+**Approach**:
+1. Read `DesktopVideoComposeService.cs` fully. Identify all methods that write to
+   `compose-telemetry.jsonl`.
+2. Move those methods into `DesktopComposeTelemetryWriter` verbatim — no logic changes.
+3. In `DesktopVideoComposeService`, inject `DesktopComposeTelemetryWriter` via constructor and
+   replace the moved method calls with calls to the injected instance.
+4. Register `DesktopComposeTelemetryWriter` in `DesktopCompositionRoot`.
+5. Update `MainWindowViewModelTestBuilder` if it directly constructs `DesktopVideoComposeService`.
 
 **Verification**:
 ```
-dotnet build   # no CS0618 warnings, no CS7036 errors
-dotnet test    # all tests green including ReleaseGate suite
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 2.5 — Make the 7 optional parameters in the full constructor required
+### Step 8.2 — Extract `DesktopComposeCacheService`
 
-**Goal**: Eliminate the `?? new ...` fallback instantiation inside the constructor body. All 7 services are registered in `DesktopCompositionRoot` and will be injected. The fallbacks are dead code in production.
+**New file**: `src/DemoStudio.Desktop.App/Services/DesktopComposeCacheService.cs`
 
-**File affected**: `src/DemoStudio.Desktop.App/ViewModels/MainWindowViewModel.cs:154–200`
+**Responsibility**: Cache validity checks, file-signature hashing, cache directory pruning. This
+has no FFmpeg dependency — it is pure filesystem work.
 
-**Current parameter declarations** (lines 154–160):
-```csharp
-DesktopProcessRunner? processRunner = null,
-DesktopCaptureMediaCoordinator? captureMediaCoordinator = null,
-DesktopNarrationCoordinator? narrationCoordinator = null,
-DesktopCaptureWatchdogCoordinator? captureWatchdogCoordinator = null,
-DesktopClipCurationCoordinator? clipCurationCoordinator = null,
-DesktopDependencyHealthService? dependencyHealthService = null,
-DesktopFfmpegOperationQueue? ffmpegOperationQueue = null)
-```
+**Approach**:
+1. Identify all cache-related methods in `DesktopVideoComposeService`: `IsUsableFile`,
+   `BuildFileSignature`, `TryPruneComposeCache`, `TryDeleteDirectory`, and any cache-read/write
+   methods.
+2. Move them verbatim into `DesktopComposeCacheService`.
+3. Inject `DesktopComposeCacheService` into `DesktopVideoComposeService` and replace all call sites.
+4. Register in `DesktopCompositionRoot`.
 
-**Current body fallbacks** (lines 182, 195–200):
-```csharp
-_processRunner = processRunner ?? new DesktopProcessRunner();
-_captureMediaCoordinator = captureMediaCoordinator ?? new DesktopCaptureMediaCoordinator(_captureRuntime, _processRunner);
-_narrationCoordinator = narrationCoordinator ?? new DesktopNarrationCoordinator(...);
-_captureWatchdogCoordinator = captureWatchdogCoordinator ?? new DesktopCaptureWatchdogCoordinator();
-_clipCurationCoordinator = clipCurationCoordinator ?? new DesktopClipCurationCoordinator();
-_dependencyHealthService = dependencyHealthService ?? new DesktopDependencyHealthService(...);
-_ffmpegOperationQueue = ffmpegOperationQueue ?? new DesktopFfmpegOperationQueue();
-```
-
-**Exact change** — remove `?` and `= null` from params; replace `?? new ...` with guard-throws:
-```csharp
-DesktopProcessRunner processRunner,
-DesktopCaptureMediaCoordinator captureMediaCoordinator,
-DesktopNarrationCoordinator narrationCoordinator,
-DesktopCaptureWatchdogCoordinator captureWatchdogCoordinator,
-DesktopClipCurationCoordinator clipCurationCoordinator,
-DesktopDependencyHealthService dependencyHealthService,
-DesktopFfmpegOperationQueue ffmpegOperationQueue)
-
-// In body:
-_processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
-_captureMediaCoordinator = captureMediaCoordinator ?? throw new ArgumentNullException(nameof(captureMediaCoordinator));
-_narrationCoordinator = narrationCoordinator ?? throw new ArgumentNullException(nameof(narrationCoordinator));
-_captureWatchdogCoordinator = captureWatchdogCoordinator ?? throw new ArgumentNullException(nameof(captureWatchdogCoordinator));
-_clipCurationCoordinator = clipCurationCoordinator ?? throw new ArgumentNullException(nameof(clipCurationCoordinator));
-_dependencyHealthService = dependencyHealthService ?? throw new ArgumentNullException(nameof(dependencyHealthService));
-_ffmpegOperationQueue = ffmpegOperationQueue ?? throw new ArgumentNullException(nameof(ffmpegOperationQueue));
-```
-
-**Why it is safe**:
-- All 7 types are registered in `DesktopCompositionRoot` (lines 17–35). DI injects them automatically.
-- `MainWindowViewModelTestBuilder.CreateMinimal()` (Step 2.2) already passes all 7 explicitly.
-- No remaining caller passes `null` for any of them after Step 2.4.
+**Why this order**: Step 8.1 first because telemetry writing is the smallest, purest extraction.
+Step 8.2 second because cache management is the next cleanest boundary. Each step reduces
+`DesktopVideoComposeService` by ~150–200 lines, making the next step safer.
 
 **Verification**:
 ```
-dotnet build   # verifies DI satisfies all params
-dotnet test    # verifies no runtime null-reference failures
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 2.6 — Document `MainWindowViewModelTestBuilder` as the canonical construction path
+### Step 8.3 — Slim `DesktopVideoComposeService` to pure FFmpeg orchestration
 
-**Goal**: After Step 2.5 makes all params required, add a comment to the builder reinforcing that it must always be kept up to date with the constructor signature.
+**Goal**: After Steps 8.1 and 8.2, `DesktopVideoComposeService` should contain only:
+- Manifest reading (or delegate to `DesktopComposeManifestService`)
+- FFmpeg argument construction
+- FFmpeg process execution
+- Compose-health snapshot writing
 
-**File affected**: `tests/DemoStudio.Desktop.App.Tests/Helpers/MainWindowViewModelTestBuilder.cs`
+**Approach**:
+1. Read the remaining body of `DesktopVideoComposeService` after Steps 8.1–8.2.
+2. If compose-health writing is still inline, extract it to a short private helper or inline it
+   into a well-named method so the orchestration flow is readable in one screen.
+3. Verify the class is under 350 lines after extraction.
 
-**Exact change**: Add a comment above `CreateMinimal()`:
-```csharp
-// All constructor parameters are required. If the MainWindowViewModel constructor
-// signature changes, this builder will fail to compile — update it before adding
-// new service dependencies to the ViewModel.
-```
-
-**Why it is safe**: Comment-only addition. No behavior change.
-
----
-
-## Phase 3 — Configuration Centralization
-
-*Centralizes hardcoded path formula that remains in `DesktopCompositionRoot`.*
-
----
-
-### Step 3.1 — Register `DesktopRuntimePaths` as a singleton to deduplicate storage root resolution
-
-**Goal**: The 7 factory lambdas in `DesktopCompositionRoot.cs:39–83` each independently call `sp.GetRequiredService<DesktopCaptureRuntime>().StorageRoot`. Extract this into one registration.
-
-**New file**: `src/DemoStudio.Desktop.App/Infrastructure/DesktopRuntimePaths.cs`
-
-```csharp
-namespace DemoStudio.Desktop.App.Infrastructure;
-
-/// <summary>
-/// Resolved runtime paths derived from DesktopCaptureRuntime at startup.
-/// Registered as a singleton to avoid re-resolving DesktopCaptureRuntime
-/// in every storage-dependent service factory.
-/// </summary>
-internal sealed record DesktopRuntimePaths(string StorageRoot, string FfmpegPath);
-```
-
-**Update `DesktopCompositionRoot.cs`** — add one registration after `DesktopCaptureRuntime`:
-```csharp
-services.AddSingleton(sp =>
-{
-    var runtime = sp.GetRequiredService<DesktopCaptureRuntime>();
-    return new DesktopRuntimePaths(runtime.StorageRoot, runtime.FfmpegPath);
-});
-```
-
-Then replace all 7 factory lambdas to use `DesktopRuntimePaths`:
-```csharp
-services.AddSingleton(sp =>
-{
-    var paths = sp.GetRequiredService<DesktopRuntimePaths>();
-    return new DesktopRuntimeLogService(paths.StorageRoot);
-});
-// ... same pattern for the other 6 lambdas
-```
-
-**Why it is safe**:
-- `DesktopRuntimePaths` is a new internal type — no public API impact.
-- The 7 services receive the same `StorageRoot` value as before.
-- Pure refactor with identical behavior.
+**No new extractions in this step** — this is a cleanup and verification pass, not another
+extraction. If the class is still oversized, plan an additional extraction step before proceeding.
 
 **Verification**:
 ```
-dotnet build
-dotnet test
-# Manual: launch the app and verify storage root is resolved correctly.
+dotnet build DemoStudio.Desktop.sln -m:1 --no-incremental
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 3.2 — Document the `StorageRoot` default in `DesktopRecorderOptionsLoader`
+## Phase 9 — Test Coverage Baseline
 
-**Goal**: The `appsettings.json` has `"StorageRoot": ""`. Document that empty string means "use the runtime default" rather than appearing like a missing value.
+**Goal**: Establish unit test coverage on the most critical logic paths currently at zero coverage.
+Focus on pure logic that can be tested without real FFmpeg, real files, or WPF context.
 
-**File affected**: `DesktopRecorderOptionsLoader.cs`
+**Rationale**: The audit found zero test coverage on all major services. This phase does not aim
+for comprehensive coverage — it targets the logic that (a) has no infrastructure dependency, (b)
+protects high-risk code paths, and (c) gives the fastest return on investment. Integration tests
+against real infrastructure are out of scope for this phase.
 
-**Exact change**: Add a comment near the `StorageRoot` read:
-```csharp
-// StorageRoot: if empty or null, DesktopCaptureRuntime computes the default path as:
-// %LOCALAPPDATA%\DemoStudio\RecorderDesktop
-// To override, set an explicit absolute path in appsettings.json or
-// via environment variable DesktopRecorder__StorageRoot.
-```
-
-**Why it is safe**: Comment-only addition. Zero behavior change.
+**Blocked until**: Phase 8 is complete. Extraction makes the services individually testable.
+Tests written before extraction would immediately become stale.
 
 ---
 
-### Step 3.3 — Create `DesktopStoragePaths` static helper
+### Step 9.1 — Unit tests for `DesktopComposeCacheService` (file signature and pruning logic)
 
-**Goal**: Centralize the default path formula so future callers (including tests) do not duplicate it.
+**New file**: `tests/DemoStudio.Desktop.App.Tests/Services/DesktopComposeCacheServiceTests.cs`
 
-**New file**: `src/DemoStudio.Desktop.App/Infrastructure/DesktopStoragePaths.cs`
+**What to test**:
+- `BuildFileSignature` returns consistent output for the same inputs
+- `BuildFileSignature` returns different output when inputs differ
+- `IsUsableFile` returns false for non-existent paths
+- `TryPruneComposeCache` does not throw on an empty directory
+- `TryDeleteDirectory` handles a missing directory gracefully
 
-```csharp
-namespace DemoStudio.Desktop.App.Infrastructure;
-
-/// <summary>
-/// Canonical path computations for DemoStudio desktop storage locations.
-/// All code that needs the recorder storage root should call this helper
-/// rather than duplicating the path formula inline.
-/// </summary>
-internal static class DesktopStoragePaths
-{
-    private const string AppFolder = "DemoStudio";
-    private const string RecorderSubfolder = "RecorderDesktop";
-
-    /// <summary>
-    /// Returns the default recorder storage root:
-    /// %LOCALAPPDATA%\DemoStudio\RecorderDesktop
-    /// </summary>
-    public static string GetDefaultRecorderRoot() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            AppFolder,
-            RecorderSubfolder);
-}
-```
-
-**Update `MainWindowViewModelTestBuilder`** to use the canonical helper for its fallback:
-```csharp
-// Replace the hardcoded fallback path with the canonical helper:
-var root = tempRoot ?? DesktopStoragePaths.GetDefaultRecorderRoot();
-```
-
-**Why it is safe**: New internal file. Single call site at this point. Centralizes one formula that would otherwise be duplicated.
+**Setup**: Use `Path.GetTempPath()` + `Guid` for temporary directories. Delete in `[TearDown]`.
 
 **Verification**:
 ```
-dotnet build
-dotnet test
+dotnet test DemoStudio.Desktop.sln -m:1 --filter "DesktopComposeCacheService"
+dotnet test DemoStudio.Desktop.sln -m:1   # full suite still green
 ```
 
 ---
 
-## Phase 4 — ViewModel Decomposition
+### Step 9.2 — Unit tests for `HealthMonitorViewModel` budget and parse logic
 
-*The largest structural change. Execute one partial at a time. Each step is independently reversible.*
+**New file**: `tests/DemoStudio.Desktop.App.Tests/ViewModels/HealthMonitorViewModelTests.cs`
 
-> **Design rule**: Each extracted ViewModel follows the same pattern already established by `OnboardingViewModel`, `SessionHistoryViewModel`, `TargetingLaunchViewModel`, etc. `MainWindowViewModel` retains a field reference and wires `PropertyChanged` exactly as it does for existing child ViewModels.
+**What to test** (pure logic — no I/O, no WPF):
+- `TryParseWriteRate`: returns false for `"-"`, `"warming up"`, empty string; parses valid rates
+- `TryParseComposeDurationSeconds`: returns false for `"-"`, invalid format; parses valid durations
+- `UpdatePerformanceBudgetState`: correct label/color for Healthy / Watch / Critical thresholds
+  - Working set below 800 MB → Healthy
+  - Working set 800–1099 MB → Watch
+  - Working set ≥ 1100 MB → Critical
+  - Write rate > 60 MB/s → Critical
+  - Compose runtime > 360s → Critical
 
-> **Blocked until**: Phase 2 is fully complete and all tests are green.
-
----
-
-### Step 4.1 — Extract `HealthMonitorViewModel` from `MainWindowViewModel.RuntimeHealth.cs`
-
-**Goal**: The `RuntimeHealth` partial manages telemetry, dependency health, performance budgets, and timer orchestration. It accesses `_dependencyHealthService`, `_performanceMetricsService`, `_smokeCheckService`, and `_captureRuntime`. These can be fully encapsulated.
-
-**Files affected**:
-- New: `src/DemoStudio.Desktop.App/ViewModels/HealthMonitorViewModel.cs`
-- Modified: `src/DemoStudio.Desktop.App/ViewModels/MainWindowViewModel.cs` (add `private readonly HealthMonitorViewModel _healthMonitor` field)
-- Modified: `src/DemoStudio.Desktop.App/ViewModels/MainWindowViewModel.RuntimeHealth.cs` (delegate all calls to `_healthMonitor`)
-- Modified: `src/DemoStudio.Desktop.App/DesktopCompositionRoot.cs` (register `HealthMonitorViewModel`)
-
-**Steps within this step**:
-1. Create `HealthMonitorViewModel` as a standalone class with its own `INotifyPropertyChanged` and injected services.
-2. In `MainWindowViewModel`, add `private readonly HealthMonitorViewModel _healthMonitor` and initialize it in the full constructor.
-3. In `MainWindowViewModel.RuntimeHealth.cs`, replace all implementation with delegation to `_healthMonitor`.
-4. Expose `HealthMonitorViewModel` as a public property for XAML binding if needed.
-5. Register `HealthMonitorViewModel` in `DesktopCompositionRoot`.
-
-**Pre-step requirement**: Read and fully map every public property in `MainWindowViewModel.RuntimeHealth.cs`. Verify none are accessed from other partials before extraction.
-
-**Why it is safe**: The partial class pattern already cleanly separates the code. Public property names and XAML binding paths are preserved (or forwarded) — UI does not change.
+**Setup**: Construct `HealthMonitorViewModel` with stub implementations of its four dependencies.
+Create stubs inline in the test file (no separate files needed for this step).
 
 **Verification**:
 ```
-dotnet build
-dotnet test
-# Manual: run the app and confirm the dependency health panel renders correctly.
+dotnet test DemoStudio.Desktop.sln -m:1 --filter "HealthMonitorViewModel"
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
 
-### Step 4.2 — Extract `PublishWorkflowViewModel` from `MainWindowViewModel.PublishWorkflow.cs`
+### Step 9.3 — Unit tests for `DesktopStoragePaths` path helpers
 
-**Goal**: Publishing logic (`_publishPackageService`, publish state, export style) is entirely self-contained after a session completes.
+**New file**: `tests/DemoStudio.Desktop.App.Tests/Infrastructure/DesktopStoragePathsTests.cs`
 
-**Files affected**:
-- New: `src/DemoStudio.Desktop.App/ViewModels/PublishWorkflowViewModel.cs`
-- Modified: `MainWindowViewModel.cs`, `MainWindowViewModel.PublishWorkflow.cs`
-- Modified: `DesktopCompositionRoot.cs`
+**What to test**:
+- `GetDefaultRecorderRoot` returns a path ending in `DemoStudio\RecorderDesktop`
+- `GetCuratedDirectory` appends `\curated` to the directory of the input path
+- `GetNarrationDirectory` formats the session ID as `N` (no hyphens)
+- `GetPublishDirectory` appends `\publish` to the storage root
+- All helpers use `Path.Combine` (not string concatenation) — test with paths containing spaces
 
-**Same pattern as Step 4.1.** Read all public properties in the partial first. Map which ones cross-reference state in other partials — those become constructor parameters or `PropertyChanged` subscriptions.
-
-**Verification**: Same as Step 4.1. Manual: verify publish workflow completes end-to-end.
-
----
-
-### Step 4.3 — Extract `TemplateManagementViewModel` from `MainWindowViewModel.Templates.cs`
-
-**Goal**: Demo template save/apply/delete is entirely self-contained around `_demoTemplateService`.
-
-**Files affected**:
-- New: `src/DemoStudio.Desktop.App/ViewModels/TemplateManagementViewModel.cs`
-- Modified: `MainWindowViewModel.cs`, `MainWindowViewModel.Templates.cs`
-- Modified: `DesktopCompositionRoot.cs`
-
----
-
-### Step 4.4 — Extract `SessionRecoveryViewModel` from `MainWindowViewModel.Recovery.cs`
-
-**Goal**: Draft state save/restore is self-contained around `_sessionRecoveryService`.
-
-**Note**: Recovery may publish state changes back to `MainWindowViewModel` — use `PropertyChanged` event forwarding as the current `OnboardingViewModel` pattern demonstrates.
-
----
-
-> **Steps 4.5–4.8** (History, Targeting, Capture, Stage) follow the same pattern.
-> Each is deferred until the preceding step is verified stable.
-> Do not begin the next partial extraction until the previous one has passed a full test run and a manual app smoke test.
-
----
-
-## Phase 5 — Service Structure Cleanup
-
-*Minor housekeeping. Safe at any point after Phase 1.*
-
----
-
-### Step 5.1 — Verify `ApplicationServiceBase` adoption (follow-up from Step 1.5)
-
-**Goal**: Confirm all 3 services extend `ApplicationServiceBase` and route through `ExecuteSaveAsync`. Verify unit tests covering the concurrency path still pass.
-
-**Files affected**: `DemoProjectService.cs`, `DemoFlowService.cs`, `DemoExecutionService.cs`
-
----
-
-### Step 5.2 — Add structured logging to `DesktopWindowCatalogService`
-
-**Goal**: After Step 1.2 typed the catch block, add actual diagnostic output for failed process name lookups.
-
-**File affected**: `src/DemoStudio.Desktop.App/Services/DesktopWindowCatalogService.cs`
-
-**Exact change**: Inject `DesktopRuntimeLogService` (or equivalent logging abstraction) via constructor. In the catch block:
-```csharp
-catch (Exception ex)
-{
-    // Log at debug level — this is a frequent, benign failure during window enumeration.
-    _log.Write("WindowCatalog", $"Could not resolve process name for PID {processId}: {ex.Message}");
-    return "Unknown";
-}
-```
-
-**Why it is safe**: Additive only. Requires registering the logger in `DesktopCompositionRoot` — it is already registered.
+**Why this matters**: These helpers will be used by multiple services after Phase 7. Testing them
+now protects against any path-separator or encoding regression introduced by the centralization.
 
 **Verification**:
 ```
-dotnet build
-dotnet test
+dotnet test DemoStudio.Desktop.sln -m:1 --filter "DesktopStoragePaths"
+dotnet test DemoStudio.Desktop.sln -m:1
+```
+
+---
+
+### Step 9.4 — Unit tests for `RecorderSessionEngine` state machine
+
+**New file**: `tests/DemoStudio.Desktop.App.Tests/Services/RecorderSessionEngineTests.cs`
+
+**What to test** (pure state transitions — no I/O):
+- Initial state is `Armed`
+- `StartOrResumeClip` from `Armed` transitions to `Recording`, increments clip count
+- `PauseClip` from `Recording` transitions to `Paused`
+- `StartOrResumeClip` from `Paused` transitions to `Recording`, adds a new clip
+- `StopCompleted` from `Recording` transitions to `Armed`, session ID is preserved
+- `StopFailed` from `Recording` transitions to `Failed`, failure reason is stored
+- `Reset` from `Failed` transitions to `Armed`, clears clips
+- `Snapshot()` is immutable — mutating engine state does not mutate a previously taken snapshot
+
+**Why this matters**: `RecorderSessionEngine` is the central state machine for the entire capture
+lifecycle. It currently has zero tests. A regression here could silently break the entire recording
+flow without a compile error.
+
+**Verification**:
+```
+dotnet test DemoStudio.Desktop.sln -m:1 --filter "RecorderSessionEngine"
+dotnet test DemoStudio.Desktop.sln -m:1
 ```
 
 ---
@@ -721,23 +611,19 @@ dotnet test
 
 | Step | Phase | File(s) | Risk | Effort |
 |---|---|---|---|---|
-| 1.1 | Stabilization | 7 × Class1.cs | Zero | 5 min |
-| 1.2 | Stabilization | DesktopWindowCatalogService.cs | Zero | 5 min |
-| 1.3 | Stabilization | DesktopStartupHealthService.cs | Very Low | 10 min |
-| 1.4 | Stabilization | DesktopCrashReporter.cs | Zero | 5 min |
-| 1.5 | Stabilization | DemoProjectService + 2 others | Low | 30 min |
-| 2.1 | DI Cleanup | MainWindowViewModel.cs | Zero | 5 min |
-| 2.2 | DI Cleanup | New test helper file | Zero | 30 min |
-| 2.3 | DI Cleanup | ReleaseConfidenceGateTests.cs | Low | 10 min |
-| 2.4 | DI Cleanup | MainWindowViewModel.cs | Low | 15 min |
-| 2.5 | DI Cleanup | MainWindowViewModel.cs | Medium | 20 min |
-| 2.6 | DI Cleanup | TestBuilder (comment only) | Zero | 5 min |
-| 3.1 | Config | DesktopCompositionRoot.cs + new file | Low | 30 min |
-| 3.2 | Config | DesktopRecorderOptionsLoader.cs | Zero | 5 min |
-| 3.3 | Config | New infrastructure file + TestBuilder | Zero | 15 min |
-| 4.1 | ViewModel | RuntimeHealth → HealthMonitorViewModel | Medium | 2–4 hrs |
-| 4.2 | ViewModel | PublishWorkflow partial | Medium | 2–4 hrs |
-| 4.3 | ViewModel | Templates partial | Medium | 1–2 hrs |
-| 4.4 | ViewModel | Recovery partial | Medium | 1–2 hrs |
-| 5.1 | Cleanup | ApplicationServiceBase | Low | 30 min |
-| 5.2 | Cleanup | DesktopWindowCatalogService.cs | Low | 20 min |
+| 5.1 | Reliability | HealthMonitorViewModel.cs | Zero | 5 min |
+| 5.2a–d | Reliability | 4 × service constructors | Very Low | 10 min each |
+| 5.3 | Reliability | DesktopCompositionRoot.cs | Zero | 5 min |
+| 5.4 | Reliability | DesktopVideoComposeService.cs | Zero | 20 min |
+| 6.1 | DI Boundary | DesktopCaptureRuntime.cs | Medium | 45 min |
+| 6.2 | DI Boundary | DesktopSmokeCheckService.cs | Low | 30 min |
+| 7.1 | Paths | DesktopStoragePaths.cs | Zero | 20 min |
+| 7.2 | Paths | DesktopVideoComposeService.cs | Very Low | 30 min |
+| 7.3a–c | Paths | 3 × services/viewmodels | Very Low | 15 min each |
+| 8.1 | Decomposition | New DesktopComposeTelemetryWriter | Medium | 1–2 hr |
+| 8.2 | Decomposition | New DesktopComposeCacheService | Medium | 2–3 hr |
+| 8.3 | Decomposition | DesktopVideoComposeService slim | Low | 30 min |
+| 9.1 | Tests | New cache service tests | Low | 45 min |
+| 9.2 | Tests | New HealthMonitorViewModel tests | Low | 1 hr |
+| 9.3 | Tests | New DesktopStoragePaths tests | Low | 30 min |
+| 9.4 | Tests | New RecorderSessionEngine tests | Low | 1 hr |
