@@ -1,4 +1,5 @@
 using DemoStudio.Capture.Abstractions.Interfaces;
+using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Domain.Entities;
 using DemoStudio.Infrastructure.Execution;
 using DemoStudio.Infrastructure.Execution.Windows;
@@ -17,6 +18,7 @@ public sealed class DesktopCaptureRuntime
     private static readonly TimeSpan StartupProbeTimeout = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan StartupProbeInterval = TimeSpan.FromMilliseconds(250);
     private readonly object _sync = new();
+    private readonly IProcessLauncher _processLauncher;
     private readonly FfmpegCaptureOptions _baseCaptureOptions;
     private readonly string _storageRoot;
     private readonly string _ffmpegPath;
@@ -27,12 +29,14 @@ public sealed class DesktopCaptureRuntime
     private IVideoCaptureService? _activeCaptureService;
     private bool _started;
 
-    public DesktopCaptureRuntime(DesktopRecorderOptions options)
+    public DesktopCaptureRuntime(DesktopRecorderOptions options, IProcessLauncher processLauncher)
     {
         if (options is null)
         {
             throw new ArgumentNullException(nameof(options));
         }
+
+        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
 
         _storageRoot = ResolveStorageRoot(options.StorageRoot);
 
@@ -389,7 +393,7 @@ public sealed class DesktopCaptureRuntime
             MicrophoneDeviceName = string.IsNullOrWhiteSpace(_baseCaptureOptions.MicrophoneDeviceName) ? null : _baseCaptureOptions.MicrophoneDeviceName.Trim()
         };
 
-        var processLauncher = new ProcessLauncher();
+        var processLauncher = _processLauncher;
         var fileStorage = new LocalFileStorage(_storageRoot);
         IWindowLocator windowLocator = new DesktopWindowLocator();
 

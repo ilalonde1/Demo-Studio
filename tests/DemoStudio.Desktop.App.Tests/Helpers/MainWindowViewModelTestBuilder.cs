@@ -28,7 +28,7 @@ internal static class MainWindowViewModelTestBuilder
 
         var sessionEngine = new RecorderSessionEngine(new SystemClock());
         var processRunner = new DesktopProcessRunner();
-        var captureRuntime = new DesktopCaptureRuntime(options);
+        var captureRuntime = new DesktopCaptureRuntime(options, new NoOpProcessLauncher());
 
         // All constructor parameters are required. If the constructor signature
         // changes, this builder will fail to compile  update it before adding

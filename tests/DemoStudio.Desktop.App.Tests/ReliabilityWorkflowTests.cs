@@ -1,5 +1,6 @@
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.ViewModels;
+using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Infrastructure.Options;
 
 namespace DemoStudio.Desktop.App.Tests;
@@ -59,7 +60,7 @@ public sealed class ReliabilityWorkflowTests
                     FfmpegPath = "missing-ffmpeg-bin-for-test"
                 }
             };
-            var runtime = new DesktopCaptureRuntime(options);
+            var runtime = new DesktopCaptureRuntime(options, new NoOpProcessLauncher());
             var service = new DesktopDependencyHealthService(runtime, new DesktopProcessRunner());
 
             var snapshot = await service.RefreshAsync();
@@ -116,5 +117,53 @@ public sealed class ReliabilityWorkflowTests
         Assert.Contains("Synthetic failure.", text, StringComparison.Ordinal);
         Assert.Contains("detail text", text, StringComparison.Ordinal);
         Assert.Contains("Try again", text, StringComparison.Ordinal);
+    }
+
+    private sealed class NoOpProcessLauncher : IProcessLauncher
+    {
+        public Task<IProcessHandle> StartProcessAsync(ProcessStartRequest request, CancellationToken cancellationToken = default)
+        {
+            IProcessHandle handle = new NoOpProcessHandle();
+            return Task.FromResult(handle);
+        }
+
+        public Task<ProcessLaunchResult> LaunchAsync(ProcessLaunchRequest request, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ProcessLaunchResult(
+                Started: false,
+                ProcessId: null,
+                Execution: new ProcessExecutionResult(
+                    ExitCode: 0,
+                    StdOut: string.Empty,
+                    StdErr: string.Empty,
+                    TimedOut: false,
+                    Cancelled: false),
+                ErrorMessage: null));
+        }
+    }
+
+    private sealed class NoOpProcessHandle : IProcessHandle
+    {
+        public int? ProcessId => null;
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        public Task<ProcessExecutionResult> WaitAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ProcessExecutionResult(
+                ExitCode: 0,
+                StdOut: string.Empty,
+                StdErr: string.Empty,
+                TimedOut: false,
+                Cancelled: false));
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

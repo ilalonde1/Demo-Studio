@@ -1,8 +1,10 @@
+using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.ViewModels;
 using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.Core.Sessions;
 using DemoStudio.Desktop.Core.Time;
+using DemoStudio.Infrastructure.Process;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DemoStudio.Desktop.App;
@@ -16,6 +18,7 @@ internal static class DesktopCompositionRoot
         var options = DesktopRecorderOptionsLoader.Load(AppContext.BaseDirectory);
         services.AddSingleton(options);
         services.AddSingleton<DesktopProcessRunner>();
+        services.AddSingleton<IProcessLauncher, ProcessLauncher>();
         services.AddSingleton<RecorderSessionEngine>(_ => new RecorderSessionEngine(new SystemClock()));
         services.AddSingleton<DesktopCaptureRuntime>();
         services.AddSingleton(sp =>
