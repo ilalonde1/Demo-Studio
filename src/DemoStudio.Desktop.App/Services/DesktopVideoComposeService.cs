@@ -428,8 +428,10 @@ public sealed class DesktopVideoComposeService
             var info = new FileInfo(path);
             return info.Length > 0;
         }
-        catch
+        catch (Exception)
         {
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
             return false;
         }
     }
@@ -446,8 +448,10 @@ public sealed class DesktopVideoComposeService
 
             return $"{path.ToLowerInvariant()}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
         }
-        catch
+        catch (Exception)
         {
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
             return string.Empty;
         }
     }
@@ -473,9 +477,10 @@ public sealed class DesktopVideoComposeService
                 Directory.Delete(path, true);
             }
         }
-        catch
+        catch (Exception)
         {
-            // best-effort cleanup only
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
         }
     }
 
@@ -545,9 +550,10 @@ public sealed class DesktopVideoComposeService
             File.WriteAllText(stampPath, nowUtc.ToString("O", CultureInfo.InvariantCulture), Encoding.UTF8);
             File.SetLastWriteTimeUtc(stampPath, nowUtc.UtcDateTime);
         }
-        catch
+        catch (Exception)
         {
-            // prune is best-effort and should never block compose
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
         }
     }
 
@@ -557,8 +563,10 @@ public sealed class DesktopVideoComposeService
         {
             return file.Exists ? file.Length : 0;
         }
-        catch
+        catch (Exception)
         {
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
             return 0;
         }
     }
@@ -572,9 +580,10 @@ public sealed class DesktopVideoComposeService
                 File.Delete(path);
             }
         }
-        catch
+        catch (Exception)
         {
-            // best effort
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
         }
     }
 
@@ -595,15 +604,17 @@ public sealed class DesktopVideoComposeService
                         Directory.Delete(dir, false);
                     }
                 }
-                catch
+                catch (Exception)
                 {
-                    // best effort
+                    // Best-effort operation. Failure here is intentionally swallowed because the
+                    // caller observes the safe fallback behavior instead.
                 }
             }
         }
-        catch
+        catch (Exception)
         {
-            // best effort
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
         }
     }
 
@@ -740,9 +751,10 @@ public sealed class DesktopVideoComposeService
 
             File.AppendAllText(outputPath, line + Environment.NewLine, Encoding.UTF8);
         }
-        catch
+        catch (Exception)
         {
-            // telemetry must never break compose
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
         }
     }
 
@@ -770,9 +782,10 @@ public sealed class DesktopVideoComposeService
             });
             File.WriteAllText(outputPath, json, Encoding.UTF8);
         }
-        catch
+        catch (Exception)
         {
-            // health snapshot must never break compose
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
         }
     }
 
@@ -802,8 +815,10 @@ public sealed class DesktopVideoComposeService
                 }
             }
         }
-        catch
+        catch (Exception)
         {
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
             return new List<ComposeTelemetryEnvelope>();
         }
 
@@ -894,8 +909,10 @@ public sealed class DesktopVideoComposeService
                 OldestWriteUtc: oldest,
                 NewestWriteUtc: newest);
         }
-        catch
+        catch (Exception)
         {
+            // Best-effort operation. Failure here is intentionally swallowed because the
+            // caller observes the safe fallback behavior instead.
             return new ComposeCacheStats(0, 0, null, null);
         }
     }
