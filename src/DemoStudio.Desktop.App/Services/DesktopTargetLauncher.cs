@@ -7,9 +7,9 @@ public sealed class DesktopTargetLauncher
 {
     private readonly DesktopProcessRunner _processRunner;
 
-    public DesktopTargetLauncher(DesktopProcessRunner? processRunner = null)
+    public DesktopTargetLauncher(DesktopProcessRunner processRunner)
     {
-        _processRunner = processRunner ?? new DesktopProcessRunner();
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     }
 
     public async Task<DesktopTargetLaunchResult> LaunchAsync(DesktopLaunchProfile profile, CancellationToken cancellationToken = default)

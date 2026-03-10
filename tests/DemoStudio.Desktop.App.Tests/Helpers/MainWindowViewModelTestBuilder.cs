@@ -38,7 +38,7 @@ internal static class MainWindowViewModelTestBuilder
             captureRuntime: captureRuntime,
             windowCatalogService: new DesktopWindowCatalogService(),
             launchProfileService: new DesktopLaunchProfileService(root),
-            targetLauncher: new DesktopTargetLauncher(),
+            targetLauncher: new DesktopTargetLauncher(processRunner),
             preflightService: new DesktopCapturePreflightService(),
             windowFocusService: new DesktopWindowFocusService(),
             sessionHistoryService: new DesktopSessionHistoryService(root),
