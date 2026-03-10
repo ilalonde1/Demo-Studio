@@ -10,10 +10,10 @@ public sealed class DesktopDependencyHealthService
     private DesktopDependencyHealthSnapshot _current = DesktopDependencyHealthSnapshot.Uninitialized();
     private DateTimeOffset _ffmpegProbeMutedUntilUtc = DateTimeOffset.MinValue;
 
-    public DesktopDependencyHealthService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner? processRunner = null)
+    public DesktopDependencyHealthService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner processRunner)
     {
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
-        _processRunner = processRunner ?? new DesktopProcessRunner();
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     }
 
     public DesktopDependencyHealthSnapshot Current => _current;
