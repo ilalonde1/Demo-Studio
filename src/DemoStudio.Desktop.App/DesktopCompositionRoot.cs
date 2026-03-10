@@ -28,9 +28,6 @@ internal static class DesktopCompositionRoot
         services.AddSingleton<DesktopCaptureWatchdogCoordinator>();
         services.AddSingleton<DesktopClipCurationCoordinator>();
         services.AddSingleton<DesktopDependencyHealthService>();
-        services.AddSingleton<HealthMonitorViewModel>();
-        services.AddSingleton<PublishWorkflowViewModel>();
-        services.AddSingleton<CaptureSessionViewModel>();
 
         services.AddSingleton<DesktopWindowCatalogService>();
         services.AddSingleton<DesktopTargetLauncher>();
