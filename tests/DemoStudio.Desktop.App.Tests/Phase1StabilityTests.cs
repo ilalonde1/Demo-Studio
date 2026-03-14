@@ -1,6 +1,7 @@
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.Tests.Helpers;
 using DemoStudio.Infrastructure.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests;
 
@@ -81,7 +82,7 @@ public sealed class Phase1StabilityTests
 
         try
         {
-            var service = new DesktopSessionHistoryService(root);
+            var service = new DesktopSessionHistoryService(root, NullLogger<DesktopSessionHistoryService>.Instance);
             var first = new DesktopSessionRecord(Guid.NewGuid(), "Completed", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 1, "a", 1, null, 0, null);
             var second = new DesktopSessionRecord(Guid.NewGuid(), "Completed", DateTimeOffset.UtcNow.AddMinutes(1), DateTimeOffset.UtcNow.AddMinutes(1), 2, "b", 2, null, 0, null);
 
@@ -111,7 +112,7 @@ public sealed class Phase1StabilityTests
 
         try
         {
-            var service = new DesktopLaunchProfileService(root);
+            var service = new DesktopLaunchProfileService(root, NullLogger<DesktopLaunchProfileService>.Instance);
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync());
 
@@ -131,7 +132,7 @@ public sealed class Phase1StabilityTests
 
         try
         {
-            var service = new DesktopSessionRecoveryService(root);
+            var service = new DesktopSessionRecoveryService(root, NullLogger<DesktopSessionRecoveryService>.Instance);
             var first = BuildDraft("Window");
             var second = BuildDraft("Desktop");
 

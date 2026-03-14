@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.IO;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -13,10 +14,11 @@ public sealed class DesktopSessionHistoryService
 
     private readonly string _storePath;
     private readonly SemaphoreSlim _sync = new(1, 1);
+    private readonly ILogger<DesktopSessionHistoryService> _logger;
 
     public string? LastLoadDiagnostic { get; private set; }
 
-    public DesktopSessionHistoryService(string storageRoot)
+    public DesktopSessionHistoryService(string storageRoot, ILogger<DesktopSessionHistoryService> logger)
     {
         if (string.IsNullOrWhiteSpace(storageRoot))
         {
@@ -25,6 +27,7 @@ public sealed class DesktopSessionHistoryService
 
         Directory.CreateDirectory(storageRoot);
         _storePath = Path.Combine(storageRoot, "session-history.json");
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<IReadOnlyList<DesktopSessionRecord>> ListAsync(CancellationToken cancellationToken = default)
@@ -59,6 +62,7 @@ public sealed class DesktopSessionHistoryService
             }
 
             await PersistUnsafeAsync(list, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("Session history updated for session {CaptureSessionId}.", record.SessionId);
         }
         finally
         {
@@ -90,6 +94,7 @@ public sealed class DesktopSessionHistoryService
                 }
                 catch (Exception ex)
                 {
+                    _logger.LogWarning(ex, "Failed deleting artifacts for session {CaptureSessionId}.", sessionId);
                     return (false, $"Failed deleting artifacts: {ex.Message}");
                 }
             }
@@ -103,13 +108,15 @@ public sealed class DesktopSessionHistoryService
                         File.Delete(match.DiagnosticsPath);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger.LogWarning(ex, "Failed deleting diagnostics bundle {DiagnosticsPath} for session {CaptureSessionId}.", match.DiagnosticsPath, sessionId);
                 }
             }
 
             list.RemoveAll(x => x.SessionId == sessionId);
             await PersistUnsafeAsync(list, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("Session history entry deleted for session {CaptureSessionId}.", sessionId);
             return (true, "Session deleted.");
         }
         finally
@@ -129,9 +136,15 @@ public sealed class DesktopSessionHistoryService
 
         if (load.Value is not null)
         {
+            if (!string.IsNullOrWhiteSpace(load.Diagnostic))
+            {
+                _logger.LogWarning("Session history loaded with recovery diagnostic: {Diagnostic}", load.Diagnostic);
+            }
+
             return load.Value;
         }
 
+        _logger.LogError("Session history load failed: {Diagnostic}", LastLoadDiagnostic);
         throw new InvalidOperationException(LastLoadDiagnostic ?? "Session history could not be loaded.");
     }
 

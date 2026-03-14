@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Infrastructure;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -22,10 +23,12 @@ public sealed class DesktopVideoComposeService
     private const long CacheMaxBytes = 2L * 1024 * 1024 * 1024; // 2 GB
     private const long CacheTrimTargetBytes = (long)(CacheMaxBytes * 0.85); // trim below 85%
     private readonly IProcessLauncher _processLauncher;
+    private readonly ILogger<DesktopVideoComposeService> _logger;
 
-    public DesktopVideoComposeService(IProcessLauncher processLauncher)
+    public DesktopVideoComposeService(IProcessLauncher processLauncher, ILogger<DesktopVideoComposeService> logger)
     {
         _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<DesktopVideoComposeResult> ComposeAsync(
@@ -33,6 +36,15 @@ public sealed class DesktopVideoComposeService
         string ffmpegPath,
         CancellationToken cancellationToken = default)
     {
+        var composeOperationId = Guid.NewGuid().ToString("N");
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["ComposeOperationId"] = composeOperationId,
+            ["CaptureSessionId"] = manifest.SessionId,
+            ["RawVideoPath"] = manifest.RawVideoPath
+        });
+
+        _logger.LogInformation("Compose workflow started for session {CaptureSessionId}.", manifest.SessionId);
         if (string.IsNullOrWhiteSpace(manifest.RawVideoPath))
         {
             return DesktopVideoComposeResult.Failure("Compose failed: raw video path is missing.");
@@ -67,7 +79,7 @@ public sealed class DesktopVideoComposeService
         Directory.CreateDirectory(curatedDirectory);
         var cacheDirectory = DesktopStoragePaths.GetComposeCacheDirectory(curatedDirectory);
         Directory.CreateDirectory(cacheDirectory);
-        TryPruneComposeCache(cacheDirectory, DateTimeOffset.UtcNow);
+        TryPruneComposeCache(cacheDirectory, DateTimeOffset.UtcNow, composeOperationId);
         var telemetryPath = DesktopStoragePaths.GetComposeTelemetryPath(curatedDirectory);
         var telemetryStages = new List<ComposeTelemetryStage>();
         var composeStopwatch = Stopwatch.StartNew();
@@ -133,7 +145,7 @@ public sealed class DesktopVideoComposeService
         if (IsUsableFile(finalCachePath))
         {
             File.Copy(finalCachePath, latestPath, overwrite: true);
-            TryDeleteDirectory(runDirectory);
+            TryDeleteDirectory(runDirectory, composeOperationId);
             return CompleteResult(
                 DesktopVideoComposeResult.Success(latestPath, $"{quality.Name} (cache)"),
                 string.Empty);
@@ -344,7 +356,7 @@ public sealed class DesktopVideoComposeService
         {
             if (!composeFailed)
             {
-                TryDeleteDirectory(runDirectory);
+                TryDeleteDirectory(runDirectory, composeOperationId);
             }
         }
 
@@ -364,8 +376,18 @@ public sealed class DesktopVideoComposeService
                 Stages: telemetryStages);
             TryWriteTelemetry(
                 telemetryPath,
-                envelope);
-            TryWriteHealthSnapshot(curatedDirectory, telemetryPath, cacheDirectory, envelope);
+                envelope,
+                composeOperationId);
+            TryWriteHealthSnapshot(curatedDirectory, telemetryPath, cacheDirectory, envelope, composeOperationId);
+            if (result.Succeeded)
+            {
+                _logger.LogInformation("Compose workflow completed successfully. OutputPath={OutputPath}", result.OutputPath);
+            }
+            else
+            {
+                _logger.LogWarning("Compose workflow completed with failure code {FailureCode}. Message={Message}", failureCode, result.Message);
+            }
+
             return result;
         }
     }
@@ -585,7 +607,7 @@ public sealed class DesktopVideoComposeService
     private static bool HasNarrationFile(DesktopComposeClip clip)
         => !string.IsNullOrWhiteSpace(clip.NarrationAudioPath) && File.Exists(clip.NarrationAudioPath);
 
-    private static bool IsUsableFile(string path)
+    private bool IsUsableFile(string path)
     {
         if (!File.Exists(path))
         {
@@ -597,15 +619,14 @@ public sealed class DesktopVideoComposeService
             var info = new FileInfo(path);
             return info.Length > 0;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Failed checking file usability for {Path}.", path);
             return false;
         }
     }
 
-    private static string BuildFileSignature(string path)
+    private string BuildFileSignature(string path)
     {
         try
         {
@@ -617,10 +638,9 @@ public sealed class DesktopVideoComposeService
 
             return $"{path.ToLowerInvariant()}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Failed building file signature for {Path}.", path);
             return string.Empty;
         }
     }
@@ -632,7 +652,7 @@ public sealed class DesktopVideoComposeService
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static void TryDeleteDirectory(string path)
+    private void TryDeleteDirectory(string path, string? composeOperationId = null)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -646,14 +666,13 @@ public sealed class DesktopVideoComposeService
                 Directory.Delete(path, true);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Failed deleting compose temp directory {Path}. ComposeOperationId={ComposeOperationId}", path, composeOperationId);
         }
     }
 
-    private static void TryPruneComposeCache(string cacheDirectory, DateTimeOffset nowUtc)
+    private void TryPruneComposeCache(string cacheDirectory, DateTimeOffset nowUtc, string? composeOperationId = null)
     {
         if (string.IsNullOrWhiteSpace(cacheDirectory) || !Directory.Exists(cacheDirectory))
         {
@@ -684,7 +703,7 @@ public sealed class DesktopVideoComposeService
             {
                 if (file.LastWriteTimeUtc < expirationUtc.UtcDateTime)
                 {
-                    TryDeleteFile(file.FullName);
+                    TryDeleteFile(file.FullName, composeOperationId);
                 }
             }
 
@@ -706,7 +725,7 @@ public sealed class DesktopVideoComposeService
                 foreach (var file in files)
                 {
                     var length = SafeLength(file);
-                    TryDeleteFile(file.FullName);
+                    TryDeleteFile(file.FullName, composeOperationId);
                     totalBytes -= length;
                     if (totalBytes <= CacheTrimTargetBytes)
                     {
@@ -715,32 +734,30 @@ public sealed class DesktopVideoComposeService
                 }
             }
 
-            TryDeleteEmptyDirectories(cacheDirectory);
+            TryDeleteEmptyDirectories(cacheDirectory, composeOperationId);
             File.WriteAllText(stampPath, nowUtc.ToString("O", CultureInfo.InvariantCulture), Encoding.UTF8);
             File.SetLastWriteTimeUtc(stampPath, nowUtc.UtcDateTime);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Compose cache prune failed for {CacheDirectory}. ComposeOperationId={ComposeOperationId}", cacheDirectory, composeOperationId);
         }
     }
 
-    private static long SafeLength(FileInfo file)
+    private long SafeLength(FileInfo file)
     {
         try
         {
             return file.Exists ? file.Length : 0;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogDebug(ex, "Failed reading file length for {Path}.", file.FullName);
             return 0;
         }
     }
 
-    private static void TryDeleteFile(string path)
+    private void TryDeleteFile(string path, string? composeOperationId = null)
     {
         try
         {
@@ -749,14 +766,13 @@ public sealed class DesktopVideoComposeService
                 File.Delete(path);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogDebug(ex, "Failed deleting compose cache file {Path}. ComposeOperationId={ComposeOperationId}", path, composeOperationId);
         }
     }
 
-    private static void TryDeleteEmptyDirectories(string rootPath)
+    private void TryDeleteEmptyDirectories(string rootPath, string? composeOperationId = null)
     {
         try
         {
@@ -773,17 +789,15 @@ public sealed class DesktopVideoComposeService
                         Directory.Delete(dir, false);
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    // Best-effort operation. Failure here is intentionally swallowed because the
-                    // caller observes the safe fallback behavior instead.
+                    _logger.LogDebug(ex, "Failed deleting empty compose cache directory {DirectoryPath}. ComposeOperationId={ComposeOperationId}", dir, composeOperationId);
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogDebug(ex, "Failed enumerating compose cache directories under {RootPath}. ComposeOperationId={ComposeOperationId}", rootPath, composeOperationId);
         }
     }
 
@@ -876,14 +890,17 @@ public sealed class DesktopVideoComposeService
                 return ComposeStageOutcome.Failure("DS-COMP-FFMPEG", execution.StdErr, stopwatch.ElapsedMilliseconds);
             }
 
+            _logger.LogInformation("Compose stage {StageName} completed in {ElapsedMs} ms.", stageName, stopwatch.ElapsedMilliseconds);
             return ComposeStageOutcome.Success(stopwatch.ElapsedMilliseconds);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning("Compose stage {StageName} cancelled after {ElapsedMs} ms.", stageName, stopwatch.ElapsedMilliseconds);
             return ComposeStageOutcome.Failure("DS-COMP-CANCEL", $"{stageName} cancelled.", stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Compose stage {StageName} failed to start after {ElapsedMs} ms.", stageName, stopwatch.ElapsedMilliseconds);
             return ComposeStageOutcome.Failure("DS-COMP-START", $"{stageName} failed to start: {ex.Message}", stopwatch.ElapsedMilliseconds);
         }
     }
@@ -914,7 +931,7 @@ public sealed class DesktopVideoComposeService
             CacheHit: cacheHit));
     }
 
-    private static void TryWriteTelemetry(string outputPath, ComposeTelemetryEnvelope envelope)
+    private void TryWriteTelemetry(string outputPath, ComposeTelemetryEnvelope envelope, string? composeOperationId = null)
     {
         try
         {
@@ -927,18 +944,18 @@ public sealed class DesktopVideoComposeService
 
             File.AppendAllText(outputPath, line + Environment.NewLine, Encoding.UTF8);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Failed writing compose telemetry to {OutputPath}. ComposeOperationId={ComposeOperationId}", outputPath, composeOperationId);
         }
     }
 
-    private static void TryWriteHealthSnapshot(
+    private void TryWriteHealthSnapshot(
         string curatedDirectory,
         string telemetryPath,
         string cacheDirectory,
-        ComposeTelemetryEnvelope latest)
+        ComposeTelemetryEnvelope latest,
+        string? composeOperationId = null)
     {
         try
         {
@@ -958,14 +975,13 @@ public sealed class DesktopVideoComposeService
             });
             File.WriteAllText(outputPath, json, Encoding.UTF8);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Failed writing compose health snapshot for {CuratedDirectory}. ComposeOperationId={ComposeOperationId}", curatedDirectory, composeOperationId);
         }
     }
 
-    private static List<ComposeTelemetryEnvelope> ReadTelemetryRuns(string telemetryPath, int maxRuns)
+    private List<ComposeTelemetryEnvelope> ReadTelemetryRuns(string telemetryPath, int maxRuns)
     {
         var result = new List<ComposeTelemetryEnvelope>();
         if (string.IsNullOrWhiteSpace(telemetryPath) || !File.Exists(telemetryPath) || maxRuns <= 0)
@@ -991,10 +1007,9 @@ public sealed class DesktopVideoComposeService
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Failed reading compose telemetry runs from {TelemetryPath}.", telemetryPath);
             return new List<ComposeTelemetryEnvelope>();
         }
 
@@ -1056,7 +1071,7 @@ public sealed class DesktopVideoComposeService
         return sortedSamples[lower] + ((sortedSamples[upper] - sortedSamples[lower]) * weight);
     }
 
-    private static ComposeCacheStats GetCacheStats(string cacheDirectory)
+    private ComposeCacheStats GetCacheStats(string cacheDirectory)
     {
         if (string.IsNullOrWhiteSpace(cacheDirectory) || !Directory.Exists(cacheDirectory))
         {
@@ -1085,10 +1100,9 @@ public sealed class DesktopVideoComposeService
                 OldestWriteUtc: oldest,
                 NewestWriteUtc: newest);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Best-effort operation. Failure here is intentionally swallowed because the
-            // caller observes the safe fallback behavior instead.
+            _logger.LogWarning(ex, "Failed reading compose cache stats for {CacheDirectory}.", cacheDirectory);
             return new ComposeCacheStats(0, 0, null, null);
         }
     }

@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using DemoStudio.Desktop.App.Services;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.ViewModels;
 
@@ -10,14 +11,17 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
 {
     private readonly IDesktopPublishWorkflowUseCase _publishWorkflowUseCase;
     private readonly IDesktopShellIntegrationUseCase _shellIntegrationUseCase;
+    private readonly ILogger<PublishWorkflowViewModel> _logger;
     private ProductionWorkspaceViewModel? _production;
 
     public PublishWorkflowViewModel(
         IDesktopPublishWorkflowUseCase publishWorkflowUseCase,
-        IDesktopShellIntegrationUseCase shellIntegrationUseCase)
+        IDesktopShellIntegrationUseCase shellIntegrationUseCase,
+        ILogger<PublishWorkflowViewModel> logger)
     {
         _publishWorkflowUseCase = publishWorkflowUseCase ?? throw new ArgumentNullException(nameof(publishWorkflowUseCase));
         _shellIntegrationUseCase = shellIntegrationUseCase ?? throw new ArgumentNullException(nameof(shellIntegrationUseCase));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -80,6 +84,7 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Publish package creation failed.");
             var failure = buildFailureDisplay("DS-DESK-PUB-001", "Publish package failed.", ex.Message);
             production.PublishStatus = failure;
             setLastRuntimeMessage(failure);
@@ -105,6 +110,7 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Copy share summary failed.");
             setRuntimeFailure("DS-DESK-SHARE-001", "Copy share summary failed.", ex);
         }
     }
@@ -123,6 +129,7 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Open publish package failed.");
             setRuntimeFailure("DS-DESK-PUB-002", "Open package failed.", ex);
         }
     }
@@ -145,6 +152,7 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Open compose health failed.");
             setRuntimeFailure("DS-DESK-COMP-001", "Open compose health failed.", ex);
         }
     }

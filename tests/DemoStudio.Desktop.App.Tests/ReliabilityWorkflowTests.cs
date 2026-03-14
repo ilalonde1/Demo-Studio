@@ -12,7 +12,7 @@ public sealed class ReliabilityWorkflowTests
     [Fact]
     public async Task ProcessRunner_ReturnsStartFailed_WhenExecutableMissing()
     {
-        var runner = new DesktopProcessRunner();
+        var runner = new DesktopProcessRunner(NullLogger<DesktopProcessRunner>.Instance);
         var startInfo = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "definitely-not-a-real-executable-12345.exe",
@@ -29,7 +29,7 @@ public sealed class ReliabilityWorkflowTests
     [Fact]
     public async Task ProcessRunner_TimesOut_AndMarksResult()
     {
-        var runner = new DesktopProcessRunner();
+        var runner = new DesktopProcessRunner(NullLogger<DesktopProcessRunner>.Instance);
         var startInfo = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "cmd.exe",

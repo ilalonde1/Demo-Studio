@@ -31,19 +31,19 @@ internal static class MainWindowViewModelTestBuilder
         };
 
         var sessionEngine = new RecorderSessionEngine(new SystemClock());
-        var processRunner = new DesktopProcessRunner();
+        var processRunner = new DesktopProcessRunner(NullLogger<DesktopProcessRunner>.Instance);
         var processLauncher = new NoOpProcessLauncher();
         var windowLocator = new DesktopWindowLocator();
         var captureFactory = new DesktopVideoCaptureServiceFactory(
             processLauncher,
             NullLogger<FfmpegVideoCaptureService>.Instance);
         var captureRuntime = new DesktopCaptureRuntime(options, processLauncher, captureFactory, windowLocator);
-        var launchProfileService = new DesktopLaunchProfileService(root);
-        var targetLauncher = new DesktopTargetLauncher(processLauncher);
+        var launchProfileService = new DesktopLaunchProfileService(root, NullLogger<DesktopLaunchProfileService>.Instance);
+        var targetLauncher = new DesktopTargetLauncher(processLauncher, NullLogger<DesktopTargetLauncher>.Instance);
         var preflightService = new DesktopCapturePreflightService(windowLocator);
         var windowFocusService = new DesktopWindowFocusService(windowLocator);
-        var sessionHistoryService = new DesktopSessionHistoryService(root);
-        var diagnosticsBundleService = new DesktopDiagnosticsBundleService(root);
+        var sessionHistoryService = new DesktopSessionHistoryService(root, NullLogger<DesktopSessionHistoryService>.Instance);
+        var diagnosticsBundleService = new DesktopDiagnosticsBundleService(root, NullLogger<DesktopDiagnosticsBundleService>.Instance);
         var ffmpegOperationQueue = new DesktopFfmpegOperationQueue();
         var targetingUseCase = new DesktopTargetingUseCase(
             new DesktopWindowCatalogService(),
@@ -51,17 +51,20 @@ internal static class MainWindowViewModelTestBuilder
             targetLauncher,
             preflightService,
             windowFocusService);
-        var sessionHistoryUseCase = new DesktopSessionHistoryUseCase(sessionHistoryService);
+        var sessionHistoryUseCase = new DesktopSessionHistoryUseCase(sessionHistoryService, NullLogger<DesktopSessionHistoryUseCase>.Instance);
         var shellIntegrationUseCase = new DesktopShellIntegrationUseCase(processRunner);
         var failureDiagnosticsUseCase = new DesktopFailureDiagnosticsUseCase(diagnosticsBundleService);
         var preflightChecksUseCase = new DesktopPreflightChecksUseCase();
-        var captureSessionUseCase = new DesktopCaptureSessionUseCase(preflightChecksUseCase);
+        var captureSessionUseCase = new DesktopCaptureSessionUseCase(preflightChecksUseCase, NullLogger<DesktopCaptureSessionUseCase>.Instance);
         var composeOutputUseCase = new DesktopComposeOutputUseCase(
             new DesktopComposeManifestService(),
-            new DesktopVideoComposeService(new NoOpProcessLauncher()),
+            new DesktopVideoComposeService(new NoOpProcessLauncher(), NullLogger<DesktopVideoComposeService>.Instance),
             ffmpegOperationQueue,
-            captureRuntime);
-        var draftSessionUseCase = new DesktopDraftSessionUseCase(new DesktopSessionRecoveryService(root));
+            captureRuntime,
+            NullLogger<DesktopComposeOutputUseCase>.Instance);
+        var draftSessionUseCase = new DesktopDraftSessionUseCase(
+            new DesktopSessionRecoveryService(root, NullLogger<DesktopSessionRecoveryService>.Instance),
+            NullLogger<DesktopDraftSessionUseCase>.Instance);
         var sessionLifecycleUseCase = new DesktopSessionLifecycleUseCase();
         var captureSessionViewModel = new CaptureSessionViewModel(
             sessionEngine,
@@ -73,13 +76,16 @@ internal static class MainWindowViewModelTestBuilder
             new DesktopPublishWorkflowUseCase(
                 new DesktopPublishPackageService(new NoOpProcessLauncher()),
                 ffmpegOperationQueue,
-                captureRuntime),
-            shellIntegrationUseCase);
+                captureRuntime,
+                NullLogger<DesktopPublishWorkflowUseCase>.Instance),
+            shellIntegrationUseCase,
+            NullLogger<PublishWorkflowViewModel>.Instance);
         var healthMonitorViewModel = new HealthMonitorViewModel(
             new DesktopDependencyHealthService(captureRuntime, processLauncher),
             new DesktopPerformanceMetricsService(),
             new DesktopSmokeCheckService(root, "ffmpeg", processLauncher, captureFactory),
-            captureRuntime);
+            captureRuntime,
+            NullLogger<HealthMonitorViewModel>.Instance);
 
         // All constructor parameters are required. If the constructor signature
         // changes, this builder will fail to compile  update it before adding
@@ -95,12 +101,12 @@ internal static class MainWindowViewModelTestBuilder
                 new DesktopClipNarrationService(new NoOpProcessLauncher()),
                 new DesktopAiNarrationService(new HttpClient(new NoOpHttpMessageHandler())),
                 processRunner),
-            captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(windowLocator),
+            captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(windowLocator, NullLogger<DesktopCaptureWatchdogCoordinator>.Instance),
             clipCurationCoordinator: new DesktopClipCurationCoordinator(),
             ffmpegOperationQueue: ffmpegOperationQueue,
-            runtimeInitializationUseCase: new DesktopRuntimeInitializationUseCase(),
+            runtimeInitializationUseCase: new DesktopRuntimeInitializationUseCase(NullLogger<DesktopRuntimeInitializationUseCase>.Instance),
             preflightChecksUseCase: preflightChecksUseCase,
-            captureSessionUseCase: captureSessionUseCase,
+            captureSessionUseCase: new DesktopCaptureSessionUseCase(preflightChecksUseCase, NullLogger<DesktopCaptureSessionUseCase>.Instance),
             composeOutputUseCase: composeOutputUseCase,
             draftSessionUseCase: draftSessionUseCase,
             sessionLifecycleUseCase: sessionLifecycleUseCase,
@@ -108,6 +114,7 @@ internal static class MainWindowViewModelTestBuilder
             sessionHistoryUseCase: sessionHistoryUseCase,
             shellIntegrationUseCase: shellIntegrationUseCase,
             failureDiagnosticsUseCase: failureDiagnosticsUseCase,
+            logger: NullLogger<MainWindowViewModel>.Instance,
             healthMonitor: healthMonitorViewModel,
             publishWorkflow: publishWorkflowViewModel,
             captureSession: captureSessionViewModel);

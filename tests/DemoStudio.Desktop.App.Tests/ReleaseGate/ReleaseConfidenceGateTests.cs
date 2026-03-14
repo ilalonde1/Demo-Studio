@@ -8,6 +8,7 @@ using DemoStudio.Desktop.App.Tests.Helpers;
 using DemoStudio.Desktop.App.ViewModels;
 using DemoStudio.Desktop.Core.Sessions;
 using DemoStudio.Desktop.Core.Time;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests.ReleaseGate;
 
@@ -24,7 +25,7 @@ public sealed class ReleaseConfidenceGateTests
         try
         {
             var launcher = new FakeProcessLauncher();
-            var composeService = new DesktopVideoComposeService(launcher);
+            var composeService = new DesktopVideoComposeService(launcher, NullLogger<DesktopVideoComposeService>.Instance);
             var composeManifest = new DesktopComposeManifest(
                 Guid.NewGuid(),
                 rawPath,
@@ -60,7 +61,7 @@ public sealed class ReleaseConfidenceGateTests
             Assert.False(string.IsNullOrWhiteSpace(publish.PackagePath));
             Assert.True(File.Exists(publish.PackagePath!));
 
-            var recovery = new DesktopSessionRecoveryService(root);
+            var recovery = new DesktopSessionRecoveryService(root, NullLogger<DesktopSessionRecoveryService>.Instance);
             var draft = new DesktopSessionDraft(
                 SessionId: Guid.NewGuid(),
                 State: RecorderSessionState.Paused,
@@ -99,7 +100,7 @@ public sealed class ReleaseConfidenceGateTests
     [Trait("Gate", "ReleaseConfidence")]
     public async Task FailureModes_ReturnDeterministicMessages()
     {
-        var compose = new DesktopVideoComposeService(new FakeProcessLauncher());
+        var compose = new DesktopVideoComposeService(new FakeProcessLauncher(), NullLogger<DesktopVideoComposeService>.Instance);
         var composeResult = await compose.ComposeAsync(
             new DesktopComposeManifest(
                 Guid.NewGuid(),

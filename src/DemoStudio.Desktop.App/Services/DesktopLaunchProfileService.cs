@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.IO;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -13,10 +14,11 @@ public sealed class DesktopLaunchProfileService
 
     private readonly string _profilesPath;
     private readonly SemaphoreSlim _sync = new(1, 1);
+    private readonly ILogger<DesktopLaunchProfileService> _logger;
 
     public string? LastLoadDiagnostic { get; private set; }
 
-    public DesktopLaunchProfileService(string storageRoot)
+    public DesktopLaunchProfileService(string storageRoot, ILogger<DesktopLaunchProfileService> logger)
     {
         if (string.IsNullOrWhiteSpace(storageRoot))
         {
@@ -25,6 +27,7 @@ public sealed class DesktopLaunchProfileService
 
         Directory.CreateDirectory(storageRoot);
         _profilesPath = Path.Combine(storageRoot, "launch-profiles.json");
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<IReadOnlyList<DesktopLaunchProfile>> ListAsync(CancellationToken cancellationToken = default)
@@ -64,6 +67,7 @@ public sealed class DesktopLaunchProfileService
             }
 
             await PersistUnsafeAsync(profiles, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("Launch profile {ProfileName} saved.", profile.Name);
         }
         finally
         {
@@ -84,6 +88,7 @@ public sealed class DesktopLaunchProfileService
             var profiles = await LoadUnsafeAsync(cancellationToken).ConfigureAwait(false);
             profiles.RemoveAll(x => x.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
             await PersistUnsafeAsync(profiles, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("Launch profile {ProfileName} deleted.", profileName);
         }
         finally
         {
@@ -102,9 +107,15 @@ public sealed class DesktopLaunchProfileService
 
         if (load.Value is not null)
         {
+            if (!string.IsNullOrWhiteSpace(load.Diagnostic))
+            {
+                _logger.LogWarning("Launch profiles loaded with recovery diagnostic: {Diagnostic}", load.Diagnostic);
+            }
+
             return load.Value;
         }
 
+        _logger.LogError("Launch profiles load failed: {Diagnostic}", LastLoadDiagnostic);
         throw new InvalidOperationException(LastLoadDiagnostic ?? "Launch profiles could not be loaded.");
     }
 

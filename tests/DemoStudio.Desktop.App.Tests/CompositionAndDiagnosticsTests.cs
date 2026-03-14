@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests;
 
@@ -10,7 +11,7 @@ public sealed class CompositionAndDiagnosticsTests
     public async Task ComposeAsync_ReturnsFailure_WhenRawVideoMissing()
     {
         var launcher = new FakeProcessLauncher();
-        var service = new DesktopVideoComposeService(launcher);
+        var service = new DesktopVideoComposeService(launcher, NullLogger<DesktopVideoComposeService>.Instance);
         var manifest = new DesktopComposeManifest(
             Guid.NewGuid(),
             Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.mp4"),
@@ -37,7 +38,7 @@ public sealed class CompositionAndDiagnosticsTests
         try
         {
             var launcher = new FakeProcessLauncher();
-            var service = new DesktopVideoComposeService(launcher);
+            var service = new DesktopVideoComposeService(launcher, NullLogger<DesktopVideoComposeService>.Instance);
             var manifest = new DesktopComposeManifest(
                 Guid.NewGuid(),
                 raw,
@@ -75,7 +76,7 @@ public sealed class CompositionAndDiagnosticsTests
         try
         {
             var launcher = new FakeProcessLauncher();
-            var service = new DesktopVideoComposeService(launcher);
+            var service = new DesktopVideoComposeService(launcher, NullLogger<DesktopVideoComposeService>.Instance);
             var manifest = new DesktopComposeManifest(
                 Guid.NewGuid(),
                 raw,
@@ -116,7 +117,7 @@ public sealed class CompositionAndDiagnosticsTests
         try
         {
             var launcher = new FakeProcessLauncher();
-            var service = new DesktopVideoComposeService(launcher);
+            var service = new DesktopVideoComposeService(launcher, NullLogger<DesktopVideoComposeService>.Instance);
             var manifest = new DesktopComposeManifest(
                 Guid.NewGuid(),
                 raw,
@@ -154,7 +155,7 @@ public sealed class CompositionAndDiagnosticsTests
         Directory.CreateDirectory(root);
         var raw = Path.Combine(root, "session.mp4");
         File.WriteAllText(raw, "raw");
-        var service = new DesktopDiagnosticsBundleService(root);
+        var service = new DesktopDiagnosticsBundleService(root, NullLogger<DesktopDiagnosticsBundleService>.Instance);
 
         try
         {

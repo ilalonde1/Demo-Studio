@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.IO;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -14,8 +15,9 @@ public sealed class DesktopDiagnosticsBundleService
     };
 
     private readonly string _storageRoot;
+    private readonly ILogger<DesktopDiagnosticsBundleService> _logger;
 
-    public DesktopDiagnosticsBundleService(string storageRoot)
+    public DesktopDiagnosticsBundleService(string storageRoot, ILogger<DesktopDiagnosticsBundleService> logger)
     {
         if (string.IsNullOrWhiteSpace(storageRoot))
         {
@@ -23,6 +25,7 @@ public sealed class DesktopDiagnosticsBundleService
         }
 
         _storageRoot = storageRoot;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         Directory.CreateDirectory(_storageRoot);
     }
 
@@ -38,6 +41,14 @@ public sealed class DesktopDiagnosticsBundleService
         string? launchArguments,
         string? launchWorkingDirectory)
     {
+        var diagnosticsOperationId = Guid.NewGuid().ToString("N");
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["DiagnosticsOperationId"] = diagnosticsOperationId,
+            ["CaptureSessionId"] = sessionId,
+            ["FailureCode"] = failureCode
+        });
+
         try
         {
             var outputDirectory = ResolveOutputDirectory(rawVideoPath);
@@ -72,10 +83,12 @@ public sealed class DesktopDiagnosticsBundleService
                 ExceptionStackTrace: exception?.StackTrace);
 
             File.WriteAllText(outputPath, JsonSerializer.Serialize(payload, JsonOptions));
+            _logger.LogWarning("Failure diagnostics bundle written to {OutputPath}.", outputPath);
             return outputPath;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed writing diagnostics bundle.");
             return null;
         }
     }

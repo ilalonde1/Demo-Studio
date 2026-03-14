@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Threading;
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.Core.Sessions;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.ViewModels;
 
@@ -29,6 +30,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly IDesktopSessionHistoryUseCase _sessionHistoryUseCase;
     private readonly IDesktopShellIntegrationUseCase _shellIntegrationUseCase;
     private readonly IDesktopFailureDiagnosticsUseCase _failureDiagnosticsUseCase;
+    private readonly ILogger<MainWindowViewModel> _logger;
     private readonly HealthMonitorViewModel _healthMonitor;
     private readonly PublishWorkflowViewModel _publishWorkflow;
     private readonly CaptureSessionViewModel _captureSession;
@@ -108,6 +110,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         IDesktopSessionHistoryUseCase sessionHistoryUseCase,
         IDesktopShellIntegrationUseCase shellIntegrationUseCase,
         IDesktopFailureDiagnosticsUseCase failureDiagnosticsUseCase,
+        ILogger<MainWindowViewModel> logger,
         HealthMonitorViewModel healthMonitor,
         PublishWorkflowViewModel publishWorkflow,
         CaptureSessionViewModel captureSession)
@@ -129,6 +132,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _sessionHistoryUseCase = sessionHistoryUseCase ?? throw new ArgumentNullException(nameof(sessionHistoryUseCase));
         _shellIntegrationUseCase = shellIntegrationUseCase ?? throw new ArgumentNullException(nameof(shellIntegrationUseCase));
         _failureDiagnosticsUseCase = failureDiagnosticsUseCase ?? throw new ArgumentNullException(nameof(failureDiagnosticsUseCase));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _healthMonitor = healthMonitor ?? throw new ArgumentNullException(nameof(healthMonitor));
         _healthMonitor.PropertyChanged += OnHealthMonitorPropertyChanged;
         _targeting = new TargetingLaunchViewModel();
@@ -1334,6 +1338,15 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 
     private void SetRuntimeFailure(string code, string summary, Exception? exception = null)
     {
+        if (exception is not null)
+        {
+            _logger.LogError(exception, "Runtime failure {FailureCode}: {Summary}", code, summary);
+        }
+        else
+        {
+            _logger.LogWarning("Runtime failure {FailureCode}: {Summary}", code, summary);
+        }
+
         _lastRuntimeMessage = BuildFailureDisplay(code, summary, exception?.Message);
         OnPropertyChanged(nameof(LastRuntimeMessage));
     }
@@ -1362,6 +1375,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             return;
         }
 
+        _logger.LogError(ex, "Background failure {FailureCode}: {Summary}", code, summary);
         await RunOnUiThreadAsync(() => SetRuntimeFailure(code, summary, ex));
     }
 
@@ -1555,16 +1569,18 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         {
             await FlushShutdownStateAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Shutdown flush failed.");
         }
 
         try
         {
             await StopTargetWatchdogAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Shutdown watchdog stop failed.");
         }
 
         await CloseStageWorkspaceAsync();
@@ -1589,6 +1605,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             return;
         }
 
+        _logger.LogInformation("Main window shutdown started for session {CaptureSessionId}.", _snapshot.SessionId);
         _isShutdownInProgress = true;
         _draftAutosaveTimer.Stop();
         _telemetryTimer.Stop();
@@ -1616,8 +1633,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
                     OnPropertyChanged(nameof(LastOutputPath));
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Shutdown capture stop failed for session {CaptureSessionId}.", _snapshot.SessionId);
             }
         }
 

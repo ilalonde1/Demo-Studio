@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -9,6 +10,12 @@ public sealed class DesktopProcessRunner
 {
     private static readonly ConcurrentDictionary<string, DateTimeOffset> StartFailureCooldownUtc = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan StartFailureBackoff = TimeSpan.FromSeconds(30);
+    private readonly ILogger<DesktopProcessRunner> _logger;
+
+    public DesktopProcessRunner(ILogger<DesktopProcessRunner> logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     public async Task<DesktopProcessRunResult> RunAsync(
         ProcessStartInfo startInfo,
@@ -33,11 +40,13 @@ public sealed class DesktopProcessRunner
         catch (Win32Exception ex)
         {
             RegisterStartFailure(startInfo.FileName);
+            _logger.LogWarning(ex, "Process start failed for {FileName}.", startInfo.FileName);
             return DesktopProcessRunResult.FromStartFailure(ex.Message);
         }
         catch (Exception ex)
         {
             RegisterStartFailure(startInfo.FileName);
+            _logger.LogWarning(ex, "Process start failed for {FileName}.", startInfo.FileName);
             return DesktopProcessRunResult.FromStartFailure(ex.Message);
         }
 
@@ -102,7 +111,7 @@ public sealed class DesktopProcessRunner
             }
             catch (Exception ex)
             {
-                Trace.TraceWarning($"DesktopProcessRunner: final WaitForExitAsync failed: {ex.Message}");
+                _logger.LogWarning(ex, "Final WaitForExitAsync failed for {FileName}.", startInfo.FileName);
             }
 
             var stdOut = await readStdOutTask;
@@ -155,6 +164,7 @@ public sealed class DesktopProcessRunner
         catch (Exception ex)
         {
             RegisterStartFailure(startInfo.FileName);
+            _logger.LogWarning(ex, "Detached process start failed for {FileName}.", startInfo.FileName);
             return DesktopProcessRunResult.FromStartFailure(ex.Message);
         }
     }
@@ -170,7 +180,7 @@ public sealed class DesktopProcessRunner
         return StartDetached(startInfo);
     }
 
-    private static void TryKill(Process process)
+    private void TryKill(Process process)
     {
         try
         {
@@ -178,7 +188,7 @@ public sealed class DesktopProcessRunner
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning($"DesktopProcessRunner: failed to kill process {process.Id}: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to kill desktop process {ProcessId}.", process.Id);
         }
     }
 

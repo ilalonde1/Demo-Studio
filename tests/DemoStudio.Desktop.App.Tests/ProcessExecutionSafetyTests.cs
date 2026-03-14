@@ -1,5 +1,6 @@
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests;
 
@@ -16,7 +17,7 @@ public sealed class ProcessExecutionSafetyTests
         try
         {
             var launcher = new CapturingProcessLauncher();
-            var service = new DesktopTargetLauncher(launcher);
+            var service = new DesktopTargetLauncher(launcher, NullLogger<DesktopTargetLauncher>.Instance);
 
             var result = await service.LaunchAsync(new DesktopLaunchProfile(
                 Name: "Demo",

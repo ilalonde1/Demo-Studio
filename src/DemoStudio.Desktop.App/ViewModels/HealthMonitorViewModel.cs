@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.Core.Sessions;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.ViewModels;
 
@@ -13,6 +14,7 @@ public sealed class HealthMonitorViewModel : INotifyPropertyChanged
     private readonly DesktopPerformanceMetricsService _performanceMetricsService;
     private readonly DesktopSmokeCheckService _smokeCheckService;
     private readonly DesktopCaptureRuntime _captureRuntime;
+    private readonly ILogger<HealthMonitorViewModel> _logger;
     private string _performanceSummary = "Perf: no samples yet.";
     private string _memoryWorkingSetText = "Working Set: -";
     private string _memoryPrivateText = "Private Memory: -";
@@ -34,12 +36,14 @@ public sealed class HealthMonitorViewModel : INotifyPropertyChanged
         DesktopDependencyHealthService dependencyHealthService,
         DesktopPerformanceMetricsService performanceMetricsService,
         DesktopSmokeCheckService smokeCheckService,
-        DesktopCaptureRuntime captureRuntime)
+        DesktopCaptureRuntime captureRuntime,
+        ILogger<HealthMonitorViewModel> logger)
     {
         _dependencyHealthService = dependencyHealthService ?? throw new ArgumentNullException(nameof(dependencyHealthService));
         _performanceMetricsService = performanceMetricsService ?? throw new ArgumentNullException(nameof(performanceMetricsService));
         _smokeCheckService = smokeCheckService ?? throw new ArgumentNullException(nameof(smokeCheckService));
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _dependencyHealthSnapshot = _dependencyHealthService.Current;
     }
 
@@ -123,6 +127,7 @@ public sealed class HealthMonitorViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Runtime telemetry refresh failed.");
             await reportBackgroundFailureAsync(
                 "DS-DESK-HEALTH-001",
                 "Runtime telemetry refresh failed.",
@@ -182,6 +187,7 @@ public sealed class HealthMonitorViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Dependency health refresh failed.");
             await reportBackgroundFailureAsync(
                 "DS-DESK-HEALTH-002",
                 "Dependency health refresh failed.",
@@ -222,6 +228,7 @@ public sealed class HealthMonitorViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Smoke check failed.");
             var status = buildFailureDisplay("DS-DESK-SMOKE-001", "Smoke check failed.", ex.Message);
             setSmokeCheckStatus(status);
             setLastRuntimeMessage(status);

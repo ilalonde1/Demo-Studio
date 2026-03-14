@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using DemoStudio.Desktop.App.Infrastructure;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -142,6 +143,13 @@ public sealed record DesktopPublishWorkflowResult(
 
 public sealed class DesktopRuntimeInitializationUseCase : IDesktopRuntimeInitializationUseCase
 {
+    private readonly ILogger<DesktopRuntimeInitializationUseCase> _logger;
+
+    public DesktopRuntimeInitializationUseCase(ILogger<DesktopRuntimeInitializationUseCase> logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
     public async Task<MainWindowInitializationResult> InitializeAsync(
         IReadOnlyList<(string StepName, Func<Task> Step)> steps,
         Func<string, Exception, Task> onStepFailure)
@@ -156,6 +164,7 @@ public sealed class DesktopRuntimeInitializationUseCase : IDesktopRuntimeInitial
             catch (Exception ex)
             {
                 failures.Add($"{stepName}: {ex.Message}");
+                _logger.LogError(ex, "Runtime initialization step {StepName} failed.", stepName);
                 await onStepFailure(stepName, ex);
             }
         }
@@ -244,14 +253,21 @@ public sealed record DesktopCaptureStopResult(
 public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
 {
     private readonly IDesktopPreflightChecksUseCase _preflightChecksUseCase;
+    private readonly ILogger<DesktopCaptureSessionUseCase> _logger;
 
-    public DesktopCaptureSessionUseCase(IDesktopPreflightChecksUseCase preflightChecksUseCase)
+    public DesktopCaptureSessionUseCase(IDesktopPreflightChecksUseCase preflightChecksUseCase, ILogger<DesktopCaptureSessionUseCase> logger)
     {
         _preflightChecksUseCase = preflightChecksUseCase;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<DesktopCaptureStartResult> StartAsync(DesktopCaptureStartRequest request, CancellationToken lifecycleCancellationToken)
     {
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["CaptureSessionId"] = request.Snapshot.SessionId
+        });
+        _logger.LogInformation("Capture start workflow requested. State={State} StageMode={IsStageMode}", request.Snapshot.State, request.IsStageMode);
         using var startFlowCts = request.CaptureSession.BeginStartFlow(lifecycleCancellationToken);
 
         try
@@ -296,6 +312,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
                 var captureStart = await request.CaptureSession.EnsureCaptureStartedAsync(targetSettings, startFlowCts.Token);
                 if (!captureStart.Succeeded)
                 {
+                    _logger.LogWarning("Capture runtime start failed: {ErrorMessage}", captureStart.ErrorMessage);
                     var failedReason = $"[DS-DESK-START-001] {captureStart.ErrorMessage ?? "Failed to start capture."}";
                     var failedSnapshot = request.CaptureSession.StopFailed(failedReason);
                     await request.PersistFinalizedSessionToHistoryAsync(failedSnapshot, captureStart.RawVideoPath);
@@ -315,6 +332,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
                 }
 
                 var activeSnapshot = request.CaptureSession.StartOrResumeClip();
+                _logger.LogInformation("Capture started successfully in {Mode} mode.", targetSettings.Mode);
                 return new DesktopCaptureStartResult(
                     activeSnapshot,
                     $"Capture started in {targetSettings.Mode} mode.",
@@ -327,10 +345,12 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
         }
         catch (OperationCanceledException) when (lifecycleCancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning("Capture start cancelled by lifecycle cancellation.");
             return new DesktopCaptureStartResult(request.Snapshot, string.Empty, null, false);
         }
         catch (OperationCanceledException)
         {
+            _logger.LogWarning("Capture start interrupted before completion.");
             var failedSnapshot = request.CaptureSession.StopFailed("[DS-DESK-START-003] Capture startup was interrupted before completion.");
             await request.PersistFinalizedSessionToHistoryAsync(failedSnapshot, null);
             await request.RefreshSessionHistoryAsync();
@@ -344,6 +364,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Capture start workflow failed.");
             var failedSnapshot = request.CaptureSession.StopFailed($"[DS-DESK-START-002] Start clip failed: {ex.Message}");
             await request.PersistFinalizedSessionToHistoryAsync(failedSnapshot, null);
             await request.RefreshSessionHistoryAsync();
@@ -363,6 +384,11 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
 
     public async Task<DesktopCaptureStopResult> StopAsync(DesktopCaptureStopRequest request)
     {
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["CaptureSessionId"] = request.Snapshot.SessionId
+        });
+        _logger.LogInformation("Capture stop workflow requested. State={State}", request.Snapshot.State);
         try
         {
             await request.StopTargetWatchdogAsync();
@@ -370,6 +396,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
             request.EndLiveClipTracking();
             if (!stopResult.Succeeded)
             {
+                _logger.LogWarning("Capture stop failed: {ErrorMessage}", stopResult.ErrorMessage);
                 var failedSnapshot = request.CaptureSession.StopFailed($"[DS-DESK-STOP-001] {stopResult.ErrorMessage ?? "Capture stop failed."}");
                 request.CaptureCompletedClipMetadata(failedSnapshot);
                 await request.PersistFinalizedSessionToHistoryAsync(failedSnapshot, stopResult.RawVideoPath);
@@ -384,6 +411,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
             }
 
             var completedSnapshot = request.CaptureSession.StopCompleted();
+            _logger.LogInformation("Capture stopped successfully. RawVideoPath={RawVideoPath}", stopResult.RawVideoPath);
             request.CaptureCompletedClipMetadata(completedSnapshot);
             if (!string.IsNullOrWhiteSpace(stopResult.RawVideoPath))
             {
@@ -403,6 +431,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Capture stop workflow failed.");
             var failedSnapshot = request.CaptureSession.StopFailed($"[DS-DESK-STOP-002] Stop session failed: {ex.Message}");
             request.EndLiveClipTracking();
             return new DesktopCaptureStopResult(
@@ -444,21 +473,31 @@ public sealed class DesktopComposeOutputUseCase : IDesktopComposeOutputUseCase
     private readonly DesktopVideoComposeService _videoComposeService;
     private readonly DesktopFfmpegOperationQueue _ffmpegOperationQueue;
     private readonly DesktopCaptureRuntime _captureRuntime;
+    private readonly ILogger<DesktopComposeOutputUseCase> _logger;
 
     public DesktopComposeOutputUseCase(
         DesktopComposeManifestService composeManifestService,
         DesktopVideoComposeService videoComposeService,
         DesktopFfmpegOperationQueue ffmpegOperationQueue,
-        DesktopCaptureRuntime captureRuntime)
+        DesktopCaptureRuntime captureRuntime,
+        ILogger<DesktopComposeOutputUseCase> logger)
     {
         _composeManifestService = composeManifestService;
         _videoComposeService = videoComposeService;
         _ffmpegOperationQueue = ffmpegOperationQueue;
         _captureRuntime = captureRuntime;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<DesktopComposeOutputResult> ComposeAsync(DesktopComposeOutputRequest request)
     {
+        var composeOperationId = Guid.NewGuid().ToString("N");
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["ComposeOperationId"] = composeOperationId,
+            ["CaptureSessionId"] = request.SessionId
+        });
+        _logger.LogInformation("Compose output workflow requested for session {CaptureSessionId}.", request.SessionId);
         var manifest = new DesktopComposeManifest(
             SessionId: request.SessionId,
             RawVideoPath: request.RawVideoPath,
@@ -482,6 +521,7 @@ public sealed class DesktopComposeOutputUseCase : IDesktopComposeOutputUseCase
         var manifestResult = _composeManifestService.WriteManifest(manifest);
         if (!manifestResult.Succeeded)
         {
+            _logger.LogWarning("Compose manifest generation failed: {Message}", manifestResult.Message);
             return new DesktopComposeOutputResult(false, manifestResult.Message, manifestResult.Message, null);
         }
 
@@ -494,6 +534,7 @@ public sealed class DesktopComposeOutputUseCase : IDesktopComposeOutputUseCase
             var rejection = string.IsNullOrWhiteSpace(queuedCompose.Message)
                 ? "Compose skipped: render queue is full."
                 : queuedCompose.Message;
+            _logger.LogWarning("Compose output workflow rejected: {Message}", rejection);
             return new DesktopComposeOutputResult(false, rejection, rejection, null);
         }
 
@@ -501,6 +542,7 @@ public sealed class DesktopComposeOutputUseCase : IDesktopComposeOutputUseCase
         var runtimeMessage = queuedCompose.QueueDelay > TimeSpan.FromMilliseconds(200)
             ? $"{composeResult.Message} (queued {queuedCompose.QueueDelay.TotalSeconds:0.0}s)"
             : composeResult.Message;
+        _logger.LogInformation("Compose output workflow completed. Success={Succeeded} OutputPath={OutputPath}", composeResult.Succeeded, composeResult.OutputPath);
         return new DesktopComposeOutputResult(
             composeResult.Succeeded,
             composeResult.Message,
@@ -549,10 +591,12 @@ public sealed record DesktopDraftRestoreResult(
 public sealed class DesktopDraftSessionUseCase : IDesktopDraftSessionUseCase
 {
     private readonly DesktopSessionRecoveryService _sessionRecoveryService;
+    private readonly ILogger<DesktopDraftSessionUseCase> _logger;
 
-    public DesktopDraftSessionUseCase(DesktopSessionRecoveryService sessionRecoveryService)
+    public DesktopDraftSessionUseCase(DesktopSessionRecoveryService sessionRecoveryService, ILogger<DesktopDraftSessionUseCase> logger)
     {
         _sessionRecoveryService = sessionRecoveryService;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<string> SaveAsync(DesktopDraftSessionState state, string lastFingerprint)
@@ -596,6 +640,7 @@ public sealed class DesktopDraftSessionUseCase : IDesktopDraftSessionUseCase
         }
 
         await _sessionRecoveryService.SaveAsync(draft);
+        _logger.LogDebug("Draft session state saved for session {CaptureSessionId}.", draft.SessionId);
         return fingerprint;
     }
 
@@ -604,6 +649,11 @@ public sealed class DesktopDraftSessionUseCase : IDesktopDraftSessionUseCase
         var draft = await _sessionRecoveryService.TryLoadAsync();
         if (draft is null)
         {
+            if (!string.IsNullOrWhiteSpace(_sessionRecoveryService.LastLoadDiagnostic))
+            {
+                _logger.LogWarning("Draft session restore returned no data: {Diagnostic}", _sessionRecoveryService.LastLoadDiagnostic);
+            }
+
             return new DesktopDraftRestoreResult(
                 false,
                 null,
@@ -646,6 +696,7 @@ public sealed class DesktopDraftSessionUseCase : IDesktopDraftSessionUseCase
         var message = string.IsNullOrWhiteSpace(_sessionRecoveryService.LastLoadDiagnostic)
             ? "Recovered previous draft session."
             : $"Recovered previous draft session. {_sessionRecoveryService.LastLoadDiagnostic}";
+        _logger.LogInformation("Draft session restored for session {CaptureSessionId}.", draft.SessionId);
         return new DesktopDraftRestoreResult(true, restored, message, BuildDraftFingerprint(draft));
     }
 
@@ -754,15 +805,18 @@ public sealed class DesktopTargetingUseCase : IDesktopTargetingUseCase
 public sealed class DesktopSessionHistoryUseCase : IDesktopSessionHistoryUseCase
 {
     private readonly DesktopSessionHistoryService _sessionHistoryService;
+    private readonly ILogger<DesktopSessionHistoryUseCase> _logger;
 
-    public DesktopSessionHistoryUseCase(DesktopSessionHistoryService sessionHistoryService)
+    public DesktopSessionHistoryUseCase(DesktopSessionHistoryService sessionHistoryService, ILogger<DesktopSessionHistoryUseCase> logger)
     {
         _sessionHistoryService = sessionHistoryService;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<DesktopSessionHistoryListResult> ListAsync(CancellationToken cancellationToken = default)
     {
         var records = await _sessionHistoryService.ListAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogDebug("Loaded {Count} session history records.", records.Count);
         return new DesktopSessionHistoryListResult(records, _sessionHistoryService.LastLoadDiagnostic);
     }
 
@@ -853,19 +907,29 @@ public sealed class DesktopPublishWorkflowUseCase : IDesktopPublishWorkflowUseCa
     private readonly DesktopPublishPackageService _publishPackageService;
     private readonly DesktopFfmpegOperationQueue _ffmpegOperationQueue;
     private readonly DesktopCaptureRuntime _captureRuntime;
+    private readonly ILogger<DesktopPublishWorkflowUseCase> _logger;
 
     public DesktopPublishWorkflowUseCase(
         DesktopPublishPackageService publishPackageService,
         DesktopFfmpegOperationQueue ffmpegOperationQueue,
-        DesktopCaptureRuntime captureRuntime)
+        DesktopCaptureRuntime captureRuntime,
+        ILogger<DesktopPublishWorkflowUseCase> logger)
     {
         _publishPackageService = publishPackageService;
         _ffmpegOperationQueue = ffmpegOperationQueue;
         _captureRuntime = captureRuntime;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<DesktopPublishWorkflowResult> CreateAsync(DesktopPublishWorkflowRequest request, CancellationToken cancellationToken)
     {
+        var publishOperationId = Guid.NewGuid().ToString("N");
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["PublishOperationId"] = publishOperationId,
+            ["CaptureSessionId"] = request.LastFinalizedSessionId
+        });
+        _logger.LogInformation("Publish workflow requested for session {CaptureSessionId}.", request.LastFinalizedSessionId);
         var sourceVideo = request.LastOutputPath;
         var record = request.SessionHistory.FirstOrDefault(x => x.SessionId == request.LastFinalizedSessionId)
                      ?? request.SelectedSessionRecord;
@@ -892,6 +956,7 @@ public sealed class DesktopPublishWorkflowUseCase : IDesktopPublishWorkflowUseCa
             var rejection = string.IsNullOrWhiteSpace(queuedPublish.Message)
                 ? "Publish package skipped: render queue is full."
                 : queuedPublish.Message;
+            _logger.LogWarning("Publish workflow rejected: {Message}", rejection);
             return new DesktopPublishWorkflowResult(false, rejection, rejection, rejection, null, null);
         }
 
@@ -902,6 +967,7 @@ public sealed class DesktopPublishWorkflowUseCase : IDesktopPublishWorkflowUseCa
         var shareSummary = result.Succeeded && !string.IsNullOrWhiteSpace(result.PackagePath)
             ? $"Demo package ready: {Path.GetFileName(result.PackagePath)}"
             : null;
+        _logger.LogInformation("Publish workflow completed. Success={Succeeded} PackagePath={PackagePath}", result.Succeeded, result.PackagePath);
         return new DesktopPublishWorkflowResult(
             result.Succeeded,
             runtimeMessage,

@@ -1,4 +1,5 @@
 using DemoStudio.Desktop.App.Services;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Tests;
 
@@ -63,6 +64,46 @@ public sealed class DesktopRuntimeLogServiceTests
 
             Assert.False(File.Exists(oldPath));
             Assert.True(File.Exists(newPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void LoggerProvider_WritesScopeCorrelationData()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-app-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var runtimeLog = new DesktopRuntimeLogService(root);
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.ClearProviders();
+                builder.AddProvider(new DesktopRuntimeLoggerProvider(runtimeLog));
+            });
+
+            var logger = loggerFactory.CreateLogger("ScopeTest");
+            using (logger.BeginScope(new Dictionary<string, object?>
+            {
+                ["CaptureSessionId"] = "session-123",
+                ["ComposeOperationId"] = "compose-456"
+            }))
+            {
+                logger.LogInformation("Scoped log message");
+            }
+
+            var logsRoot = Path.Combine(root, "logs");
+            var logPath = Directory.GetFiles(logsRoot, "runtime-*.log", SearchOption.TopDirectoryOnly).Single();
+            var content = File.ReadAllText(logPath);
+            Assert.Contains("CaptureSessionId=session-123", content, StringComparison.Ordinal);
+            Assert.Contains("ComposeOperationId=compose-456", content, StringComparison.Ordinal);
+            Assert.Contains("Scoped log message", content, StringComparison.Ordinal);
         }
         finally
         {

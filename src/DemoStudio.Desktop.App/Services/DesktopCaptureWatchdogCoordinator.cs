@@ -1,17 +1,20 @@
 using DemoStudio.Infrastructure.Execution.Windows;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
 public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
 {
     private readonly IWindowLocator _windowLocator;
+    private readonly ILogger<DesktopCaptureWatchdogCoordinator> _logger;
     private CancellationTokenSource? _cancellation;
     private Task? _watchdogTask;
     private volatile bool _stopTriggered;
 
-    public DesktopCaptureWatchdogCoordinator(IWindowLocator windowLocator)
+    public DesktopCaptureWatchdogCoordinator(IWindowLocator windowLocator, ILogger<DesktopCaptureWatchdogCoordinator> logger)
     {
         _windowLocator = windowLocator ?? throw new ArgumentNullException(nameof(windowLocator));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public void Start(
@@ -29,6 +32,8 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
         _cancellation?.Dispose();
         _cancellation = new CancellationTokenSource();
         var token = _cancellation.Token;
+        var snapshot = targetSettingsProvider();
+        _logger.LogInformation("Starting capture watchdog for mode {Mode} target {WindowHandle}.", snapshot.Mode, snapshot.WindowHandleHex);
         _watchdogTask = Task.Run(
             () => RunAsync(targetSettingsProvider, reportMessageAsync, stopCaptureAsync, token),
             token);
@@ -48,10 +53,12 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
                 }
                 catch (OperationCanceledException)
                 {
+                    _logger.LogDebug("Capture watchdog stop observed cancellation.");
                 }
             }
         }
 
+        _logger.LogInformation("Capture watchdog stopped.");
         _watchdogTask = null;
         _cancellation?.Dispose();
         _cancellation = null;
@@ -59,6 +66,7 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
 
     public void Dispose()
     {
+        _logger.LogDebug("Disposing capture watchdog coordinator.");
         _cancellation?.Cancel();
         _cancellation?.Dispose();
     }
@@ -104,6 +112,7 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
                 if (consecutiveMisses >= warningThreshold && !warningShown)
                 {
                     warningShown = true;
+                    _logger.LogWarning("Watchdog warning threshold reached for target {WindowHandle}.", current.WindowHandleHex);
                     await reportMessageAsync("Watchdog warning: locked target window is unavailable.");
                 }
 
@@ -115,6 +124,7 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
                     }
 
                     _stopTriggered = true;
+                    _logger.LogError("Watchdog stop threshold reached for target {WindowHandle}.", current.WindowHandleHex);
                     await stopCaptureAsync("Watchdog stopped recording: target window became unavailable.");
                     return;
                 }
@@ -127,6 +137,7 @@ public sealed class DesktopCaptureWatchdogCoordinator : IDisposable
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Capture watchdog iteration failed.");
                 await reportMessageAsync($"Watchdog warning: {ex.Message}");
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }

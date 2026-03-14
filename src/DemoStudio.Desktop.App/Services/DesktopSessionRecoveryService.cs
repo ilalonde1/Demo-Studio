@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DemoStudio.Desktop.Core.Sessions;
 using System.IO;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -13,18 +14,25 @@ public sealed class DesktopSessionRecoveryService
     };
 
     private readonly string _draftPath;
+    private readonly ILogger<DesktopSessionRecoveryService> _logger;
 
     public string? LastLoadDiagnostic { get; private set; }
 
-    public DesktopSessionRecoveryService(string storageRoot)
+    public DesktopSessionRecoveryService(string storageRoot, ILogger<DesktopSessionRecoveryService> logger)
     {
         Directory.CreateDirectory(storageRoot);
         _draftPath = Path.Combine(storageRoot, "session-draft.json");
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task SaveAsync(DesktopSessionDraft draft, CancellationToken cancellationToken = default)
     {
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["CaptureSessionId"] = draft.SessionId
+        });
         await DesktopAtomicJsonFile.SaveAsync(_draftPath, draft, JsonOptions, cancellationToken);
+        _logger.LogInformation("Session draft saved to {DraftPath}.", _draftPath);
     }
 
     public async Task<DesktopSessionDraft?> TryLoadAsync(CancellationToken cancellationToken = default)
@@ -38,14 +46,25 @@ public sealed class DesktopSessionRecoveryService
 
         if (load.Value is not null)
         {
+            if (!string.IsNullOrWhiteSpace(load.Diagnostic))
+            {
+                _logger.LogWarning("Session draft loaded with recovery diagnostic: {Diagnostic}", load.Diagnostic);
+            }
+            else
+            {
+                _logger.LogInformation("Session draft loaded from {DraftPath}.", _draftPath);
+            }
+
             return load.Value;
         }
 
+        _logger.LogError("Session draft load failed: {Diagnostic}", LastLoadDiagnostic);
         throw new InvalidOperationException(LastLoadDiagnostic ?? "Session draft could not be loaded.");
     }
 
     public Task ClearAsync(CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Clearing session draft state at {DraftPath}.", _draftPath);
         return DesktopAtomicJsonFile.DeleteAsync(_draftPath, cancellationToken);
     }
 }

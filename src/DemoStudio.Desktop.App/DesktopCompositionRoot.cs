@@ -205,22 +205,30 @@ internal static class DesktopCompositionRoot
         services.AddSingleton<DesktopCrashReporter>(sp =>
         {
             var paths = sp.GetRequiredService<DesktopRuntimePaths>();
-            return new DesktopCrashReporter(paths.StorageRoot);
+            return new DesktopCrashReporter(
+                paths.StorageRoot,
+                sp.GetRequiredService<ILogger<DesktopCrashReporter>>());
         });
         services.AddSingleton<DesktopLaunchProfileService>(sp =>
         {
             var paths = sp.GetRequiredService<DesktopRuntimePaths>();
-            return new DesktopLaunchProfileService(paths.StorageRoot);
+            return new DesktopLaunchProfileService(
+                paths.StorageRoot,
+                sp.GetRequiredService<ILogger<DesktopLaunchProfileService>>());
         });
         services.AddSingleton<DesktopSessionHistoryService>(sp =>
         {
             var paths = sp.GetRequiredService<DesktopRuntimePaths>();
-            return new DesktopSessionHistoryService(paths.StorageRoot);
+            return new DesktopSessionHistoryService(
+                paths.StorageRoot,
+                sp.GetRequiredService<ILogger<DesktopSessionHistoryService>>());
         });
         services.AddSingleton<DesktopDiagnosticsBundleService>(sp =>
         {
             var paths = sp.GetRequiredService<DesktopRuntimePaths>();
-            return new DesktopDiagnosticsBundleService(paths.StorageRoot);
+            return new DesktopDiagnosticsBundleService(
+                paths.StorageRoot,
+                sp.GetRequiredService<ILogger<DesktopDiagnosticsBundleService>>());
         });
         services.AddSingleton<DesktopSmokeCheckService>(sp =>
         {
@@ -244,7 +252,9 @@ internal static class DesktopCompositionRoot
         services.AddSingleton<DesktopSessionRecoveryService>(sp =>
         {
             var paths = sp.GetRequiredService<DesktopRuntimePaths>();
-            return new DesktopSessionRecoveryService(paths.StorageRoot);
+            return new DesktopSessionRecoveryService(
+                paths.StorageRoot,
+                sp.GetRequiredService<ILogger<DesktopSessionRecoveryService>>());
         });
         services.AddSingleton<DesktopStartupHealthService>();
         services.AddSingleton<IDesktopRuntimeInitializationUseCase, DesktopRuntimeInitializationUseCase>();
