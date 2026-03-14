@@ -35,12 +35,22 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        var profile = BuildLaunchProfileFromFields();
-        await _targetingUseCase.SaveLaunchProfileAsync(profile);
-        await RefreshLaunchProfilesAsync();
-        SelectedLaunchProfile = LaunchProfiles.FirstOrDefault(x => x.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
-        LaunchStatus = $"Saved launch profile '{profile.Name}'.";
-        OnPropertyChanged(nameof(LaunchStatus));
+        try
+        {
+            var profile = BuildLaunchProfileFromFields();
+            await _targetingUseCase.SaveLaunchProfileAsync(profile);
+            await RefreshLaunchProfilesAsync();
+            SelectedLaunchProfile = LaunchProfiles.FirstOrDefault(x => x.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+            LaunchStatus = $"Saved launch profile '{profile.Name}'.";
+            OnPropertyChanged(nameof(LaunchStatus));
+        }
+        catch (Exception ex)
+        {
+            LaunchStatus = $"Launch profile invalid: {ex.Message}";
+            _lastRuntimeMessage = BuildFailureDisplay("DS-DESK-LAUNCHPROFILE-001", "Launch profile rejected.", ex.Message);
+            OnPropertyChanged(nameof(LaunchStatus));
+            OnPropertyChanged(nameof(LastRuntimeMessage));
+        }
     }
 
     private async Task DeleteSelectedLaunchProfileAsync()

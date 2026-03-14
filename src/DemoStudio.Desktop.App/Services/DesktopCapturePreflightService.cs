@@ -54,24 +54,15 @@ public sealed class DesktopCapturePreflightService
 
     private static void ValidateLaunchProfile(DesktopLaunchProfile profile, List<string> errors)
     {
+        var validation = DesktopLaunchProfilePolicy.ValidateOptionalForPreflight(profile);
         if (string.IsNullOrWhiteSpace(profile.ExecutablePath))
         {
             return;
         }
 
-        var executable = Path.GetFullPath(profile.ExecutablePath.Trim());
-        if (!File.Exists(executable))
+        if (!validation.IsValid || validation.Profile is null)
         {
-            errors.Add($"Launch executable not found: '{executable}'.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(profile.WorkingDirectory))
-        {
-            var workingDirectory = Path.GetFullPath(profile.WorkingDirectory.Trim());
-            if (!Directory.Exists(workingDirectory))
-            {
-                errors.Add($"Launch working directory not found: '{workingDirectory}'.");
-            }
+            errors.Add(validation.Error ?? "Launch profile is invalid.");
         }
     }
 

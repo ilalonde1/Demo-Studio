@@ -45,6 +45,39 @@ public sealed class ProcessExecutionSafetyTests
     }
 
     [Fact]
+    public async Task TargetLauncher_RejectsDirectoryPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-app-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var launcher = new CapturingProcessLauncher();
+            var service = new DesktopTargetLauncher(launcher, NullLogger<DesktopTargetLauncher>.Instance);
+
+            var result = await service.LaunchAsync(new DesktopLaunchProfile(
+                Name: "Demo",
+                ExecutablePath: root,
+                Arguments: null,
+                WorkingDirectory: root,
+                StartupDelaySeconds: 0,
+                ExpectedWindowTitleContains: null,
+                ExpectedProcessName: null));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("directory", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Null(launcher.LastStartRequest);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ClipNarration_UsesStructuredArguments()
     {
         var root = Path.Combine(Path.GetTempPath(), "demostudio-app-tests", Guid.NewGuid().ToString("N"));

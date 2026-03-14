@@ -7,6 +7,7 @@ using DemoStudio.Automation.Abstractions.Interfaces;
 using DemoStudio.Automation.FlaUI.Internal;
 using DemoStudio.Automation.FlaUI.Models;
 using DemoStudio.Automation.FlaUI.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 public sealed class FlaUIDesktopAutomationEngine : IDesktopAutomationEngine
@@ -14,15 +15,18 @@ public sealed class FlaUIDesktopAutomationEngine : IDesktopAutomationEngine
     private readonly IProcessLauncher _processLauncher;
     private readonly IFileStorage _fileStorage;
     private readonly FlaUIRunnerOptions _options;
+    private readonly ILogger<FlaUIDesktopAutomationEngine> _logger;
 
     public FlaUIDesktopAutomationEngine(
         IProcessLauncher processLauncher,
         IFileStorage fileStorage,
-        IOptions<FlaUIRunnerOptions> options)
+        IOptions<FlaUIRunnerOptions> options,
+        ILogger<FlaUIDesktopAutomationEngine> logger)
     {
         _processLauncher = processLauncher;
         _fileStorage = fileStorage;
         _options = options.Value;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<AutomationExecutionResult> ExecuteAsync(AutomationExecutionRequest request, CancellationToken cancellationToken = default)
@@ -41,6 +45,7 @@ public sealed class FlaUIDesktopAutomationEngine : IDesktopAutomationEngine
             }
 
             var runnerExePath = ResolveRunnerExecutablePath(_options.RunnerExePath, outputDirectory);
+            _logger.LogInformation("Resolved FlaUI runner executable to {RunnerExePath}.", runnerExePath);
             var arguments = RunnerCommandBuilder.BuildArguments(requestPath, responsePath, inspectMode: false);
             var workingDirectory = Path.GetDirectoryName(runnerExePath) ?? Environment.CurrentDirectory;
 
@@ -98,10 +103,12 @@ public sealed class FlaUIDesktopAutomationEngine : IDesktopAutomationEngine
         }
         catch (OperationCanceledException)
         {
+            _logger.LogWarning("FlaUI execution was cancelled.");
             return new AutomationExecutionResult(false, Array.Empty<string>(), "FlaUI execution was cancelled.");
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "FlaUI execution failed.");
             return new AutomationExecutionResult(false, Array.Empty<string>(), $"FlaUI execution failed: {ex.Message}");
         }
     }

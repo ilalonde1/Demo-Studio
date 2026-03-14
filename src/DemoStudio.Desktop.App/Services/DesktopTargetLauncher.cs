@@ -21,24 +21,16 @@ public sealed class DesktopTargetLauncher : IDisposable, IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (string.IsNullOrWhiteSpace(profile.ExecutablePath))
+        var validation = DesktopLaunchProfilePolicy.ValidateForExecution(profile);
+        if (!validation.IsValid || validation.Profile is null)
         {
-            return DesktopTargetLaunchResult.Failure("Executable path is required.");
+            _logger.LogWarning("Rejected invalid launch profile {ProfileName}: {Error}", profile.Name, validation.Error);
+            return DesktopTargetLaunchResult.Failure(validation.Error ?? "Launch profile is invalid.");
         }
 
-        var executablePath = Path.GetFullPath(profile.ExecutablePath.Trim());
-        if (!File.Exists(executablePath))
-        {
-            return DesktopTargetLaunchResult.Failure($"Executable not found: '{executablePath}'.");
-        }
-
-        var workingDirectory = string.IsNullOrWhiteSpace(profile.WorkingDirectory)
-            ? Path.GetDirectoryName(executablePath)
-            : Path.GetFullPath(profile.WorkingDirectory.Trim());
-        if (string.IsNullOrWhiteSpace(workingDirectory) || !Directory.Exists(workingDirectory))
-        {
-            return DesktopTargetLaunchResult.Failure($"Working directory not found: '{workingDirectory}'.");
-        }
+        var normalizedProfile = validation.Profile;
+        var executablePath = normalizedProfile.ExecutablePath;
+        var workingDirectory = normalizedProfile.WorkingDirectory!;
 
         IProcessHandle handle;
         using var scope = _logger.BeginScope(new Dictionary<string, object?>
@@ -51,7 +43,7 @@ public sealed class DesktopTargetLauncher : IDisposable, IAsyncDisposable
             handle = await _processLauncher.StartProcessAsync(
                 new ProcessStartRequest(
                     executablePath,
-                    profile.Arguments ?? string.Empty,
+                    normalizedProfile.Arguments ?? string.Empty,
                     workingDirectory,
                     Timeout: null,
                     ArgumentList: null,
@@ -74,9 +66,9 @@ public sealed class DesktopTargetLauncher : IDisposable, IAsyncDisposable
             await handle.DisposeAsync();
         }
 
-        if (profile.StartupDelaySeconds > 0)
+        if (normalizedProfile.StartupDelaySeconds > 0)
         {
-            await Task.Delay(TimeSpan.FromSeconds(profile.StartupDelaySeconds), cancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(normalizedProfile.StartupDelaySeconds), cancellationToken);
         }
 
         _logger.LogInformation("Target launch succeeded for {ExecutablePath}.", executablePath);

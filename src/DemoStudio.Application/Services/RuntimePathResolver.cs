@@ -2,6 +2,16 @@ namespace DemoStudio.Application.Services;
 
 public static class RuntimePathResolver
 {
+    private static readonly string[] IgnoredSearchSegments =
+    {
+        ".git",
+        ".vs",
+        "node_modules",
+        "obj",
+        "packages",
+        "TestResults"
+    };
+
     public static bool TryResolveFile(string configuredPath, out string fullPath, string? anchorPath = null)
     {
         fullPath = string.Empty;
@@ -106,7 +116,7 @@ public static class RuntimePathResolver
                 continue;
             }
 
-            var resolved = ResolveExecutableWithinDirectory(candidateDirectory);
+            var resolved = ResolveExecutableWithinDirectory(candidateDirectory, configuredPath);
             if (!string.IsNullOrWhiteSpace(resolved))
             {
                 fullPath = resolved;
@@ -153,34 +163,193 @@ public static class RuntimePathResolver
         }
     }
 
-    private static string? ResolveExecutableWithinDirectory(string directory)
+    private static string? ResolveExecutableWithinDirectory(string directory, string configuredPath)
     {
         try
         {
-            var candidates = Directory.EnumerateFiles(directory, "*.exe", SearchOption.AllDirectories)
-                .Where(path =>
-                {
-                    var fileName = Path.GetFileName(path);
-                    if (string.IsNullOrWhiteSpace(fileName))
-                    {
-                        return false;
-                    }
+            var candidateFileName = Path.GetFileName(
+                Path.TrimEndingDirectorySeparator(configuredPath.Trim()));
+            var projectName = Path.GetFileName(
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory)));
 
-                    return !fileName.Equals("apphost.exe", StringComparison.OrdinalIgnoreCase)
-                        && !fileName.Equals("testhost.exe", StringComparison.OrdinalIgnoreCase)
-                        && !fileName.EndsWith(".vshost.exe", StringComparison.OrdinalIgnoreCase);
-                })
-                .Select(path => Path.GetFullPath(path))
+            var searchRoots = EnumerateExecutableSearchRoots(directory).ToArray();
+            var exactNamedCandidate = searchRoots
+                .SelectMany(root => EnumerateExecutableCandidates(root, maxDepth: GetSearchDepth(root)))
+                .Where(path => MatchesPreferredExecutableName(path, candidateFileName, projectName))
                 .OrderBy(path => ScoreExecutablePath(path))
                 .ThenBy(path => path.Length)
+                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(exactNamedCandidate))
+            {
+                return exactNamedCandidate;
+            }
 
-            return candidates;
+            return searchRoots
+                .SelectMany(root => EnumerateExecutableCandidates(root, maxDepth: GetSearchDepth(root)))
+                .OrderBy(path => ScoreExecutablePath(path))
+                .ThenBy(path => path.Length)
+                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
         }
         catch
         {
             return null;
         }
+    }
+
+    private static IEnumerable<string> EnumerateExecutableSearchRoots(string directory)
+    {
+        yield return directory;
+
+        foreach (var root in EnumerateKnownLayoutRoots(directory))
+        {
+            yield return root;
+        }
+    }
+
+    private static IEnumerable<string> EnumerateKnownLayoutRoots(string directory)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var relativeRoot in new[]
+                 {
+                     "publish",
+                     "app.publish",
+                     Path.Combine("bin", "Debug"),
+                     Path.Combine("bin", "Release")
+                 })
+        {
+            string candidateRoot;
+            try
+            {
+                candidateRoot = Path.GetFullPath(Path.Combine(directory, relativeRoot));
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (Directory.Exists(candidateRoot) && seen.Add(candidateRoot))
+            {
+                yield return candidateRoot;
+            }
+        }
+    }
+
+    private static int GetSearchDepth(string root)
+    {
+        var normalized = root.Replace('/', '\\');
+        if (normalized.EndsWith("\\bin\\Debug", StringComparison.OrdinalIgnoreCase)
+            || normalized.EndsWith("\\bin\\Release", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        if (normalized.EndsWith("\\publish", StringComparison.OrdinalIgnoreCase)
+            || normalized.EndsWith("\\app.publish", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        return 0;
+    }
+
+    private static IEnumerable<string> EnumerateExecutableCandidates(string root, int maxDepth)
+    {
+        var pending = new Queue<(string Directory, int Depth)>();
+        pending.Enqueue((root, 0));
+
+        while (pending.Count > 0)
+        {
+            var (directory, depth) = pending.Dequeue();
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(directory, "*.exe", SearchOption.TopDirectoryOnly);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                if (IsSupportedExecutableCandidate(file))
+                {
+                    yield return Path.GetFullPath(file);
+                }
+            }
+
+            if (depth >= maxDepth)
+            {
+                continue;
+            }
+
+            IEnumerable<string> childDirectories;
+            try
+            {
+                childDirectories = Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var childDirectory in childDirectories)
+            {
+                if (ShouldSkipExecutableSearchDirectory(childDirectory))
+                {
+                    continue;
+                }
+
+                pending.Enqueue((childDirectory, depth + 1));
+            }
+        }
+    }
+
+    private static bool ShouldSkipExecutableSearchDirectory(string directory)
+    {
+        var name = Path.GetFileName(directory);
+        return string.IsNullOrWhiteSpace(name)
+               || IgnoredSearchSegments.Contains(name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesPreferredExecutableName(string path, string? candidateFileName, string? projectName)
+    {
+        var fileName = Path.GetFileName(path);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidateFileName)
+            && fileName.Equals(candidateFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(projectName))
+        {
+            return false;
+        }
+
+        var projectExecutableName = projectName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? projectName
+            : projectName + ".exe";
+        return fileName.Equals(projectExecutableName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedExecutableCandidate(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return false;
+        }
+
+        return !fileName.Equals("apphost.exe", StringComparison.OrdinalIgnoreCase)
+               && !fileName.Equals("testhost.exe", StringComparison.OrdinalIgnoreCase)
+               && !fileName.EndsWith(".vshost.exe", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int ScoreExecutablePath(string path)

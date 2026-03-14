@@ -97,10 +97,18 @@ public sealed class DesktopDiagnosticsBundleService
     {
         if (!string.IsNullOrWhiteSpace(rawVideoPath))
         {
-            var directory = Path.GetDirectoryName(rawVideoPath);
-            if (!string.IsNullOrWhiteSpace(directory))
+            try
             {
-                return directory;
+                var resolvedRawVideoPath = Path.GetFullPath(rawVideoPath);
+                var directory = Path.GetDirectoryName(resolvedRawVideoPath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    return directory;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Diagnostics bundle falling back to storage diagnostics directory because raw video path could not be resolved.");
             }
         }
 

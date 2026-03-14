@@ -126,6 +126,32 @@ public sealed class Phase1StabilityTests
     }
 
     [Fact]
+    public async Task LaunchProfileService_SaveAsync_RejectsMissingExecutablePath()
+    {
+        var root = CreateTempRoot();
+
+        try
+        {
+            var service = new DesktopLaunchProfileService(root, NullLogger<DesktopLaunchProfileService>.Instance);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(new DesktopLaunchProfile(
+                Name: "Invalid",
+                ExecutablePath: "   ",
+                Arguments: null,
+                WorkingDirectory: null,
+                StartupDelaySeconds: 0,
+                ExpectedWindowTitleContains: null,
+                ExpectedProcessName: null)));
+
+            Assert.Contains("executable path is required", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            SafeDelete(root);
+        }
+    }
+
+    [Fact]
     public async Task SessionRecoveryService_UsesAtomicSaveAndReportsBackupRecovery()
     {
         var root = CreateTempRoot();

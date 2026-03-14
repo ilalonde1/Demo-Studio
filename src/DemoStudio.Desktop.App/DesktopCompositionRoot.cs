@@ -157,7 +157,8 @@ internal static class DesktopCompositionRoot
                 return new FlaUIDesktopAutomationEngine(
                     sp.GetRequiredService<IProcessLauncher>(),
                     sp.GetRequiredService<IFileStorage>(),
-                    sp.GetRequiredService<IOptions<FlaUIRunnerOptions>>());
+                    sp.GetRequiredService<IOptions<FlaUIRunnerOptions>>(),
+                    sp.GetRequiredService<ILogger<FlaUIDesktopAutomationEngine>>());
             }
 
             return new StubDesktopAutomationEngine();
@@ -170,7 +171,8 @@ internal static class DesktopCompositionRoot
                 return new FlaUIDesktopInspectionService(
                     sp.GetRequiredService<IProcessLauncher>(),
                     sp.GetRequiredService<IFileStorage>(),
-                    sp.GetRequiredService<IOptions<FlaUIRunnerOptions>>());
+                    sp.GetRequiredService<IOptions<FlaUIRunnerOptions>>(),
+                    sp.GetRequiredService<ILogger<FlaUIDesktopInspectionService>>());
             }
 
             return new StubDesktopInspectionService();

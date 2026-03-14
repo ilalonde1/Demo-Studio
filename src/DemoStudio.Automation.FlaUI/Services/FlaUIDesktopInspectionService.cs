@@ -6,6 +6,7 @@ using DemoStudio.Application.Services;
 using DemoStudio.Automation.FlaUI.Internal;
 using DemoStudio.Automation.FlaUI.Options;
 using DemoStudio.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 public sealed class FlaUIDesktopInspectionService : IDesktopInspectionService
@@ -13,15 +14,18 @@ public sealed class FlaUIDesktopInspectionService : IDesktopInspectionService
     private readonly IProcessLauncher _processLauncher;
     private readonly IFileStorage _fileStorage;
     private readonly FlaUIRunnerOptions _options;
+    private readonly ILogger<FlaUIDesktopInspectionService> _logger;
 
     public FlaUIDesktopInspectionService(
         IProcessLauncher processLauncher,
         IFileStorage fileStorage,
-        IOptions<FlaUIRunnerOptions> options)
+        IOptions<FlaUIRunnerOptions> options,
+        ILogger<FlaUIDesktopInspectionService> logger)
     {
         _processLauncher = processLauncher;
         _fileStorage = fileStorage;
         _options = options.Value;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<ElementInspectionResult> InspectAsync(ApplicationTarget target, CancellationToken cancellationToken = default)
@@ -44,6 +48,7 @@ public sealed class FlaUIDesktopInspectionService : IDesktopInspectionService
             }
 
             var runnerExePath = ResolveRunnerExecutablePath(_options.RunnerExePath, outputDirectory);
+            _logger.LogInformation("Resolved FlaUI inspection runner executable to {RunnerExePath}.", runnerExePath);
             var arguments = RunnerCommandBuilder.BuildArguments(requestPath, responsePath, inspectMode: true);
             var workingDirectory = Path.GetDirectoryName(runnerExePath) ?? Environment.CurrentDirectory;
 
@@ -102,10 +107,12 @@ public sealed class FlaUIDesktopInspectionService : IDesktopInspectionService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning("Desktop inspection was cancelled.");
             return new ElementInspectionResult(false, "Inspection cancelled.", null, Array.Empty<string>());
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Desktop inspection failed.");
             return new ElementInspectionResult(false, ex.Message, null, Array.Empty<string>());
         }
     }

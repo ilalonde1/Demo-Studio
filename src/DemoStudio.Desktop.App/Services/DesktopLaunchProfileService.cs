@@ -47,27 +47,29 @@ public sealed class DesktopLaunchProfileService
 
     public async Task SaveAsync(DesktopLaunchProfile profile, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(profile.Name))
+        var validation = DesktopLaunchProfilePolicy.ValidateForPersistence(profile);
+        if (!validation.IsValid || validation.Profile is null)
         {
-            throw new InvalidOperationException("Profile name is required.");
+            throw new InvalidOperationException(validation.Error ?? "Launch profile is invalid.");
         }
 
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var profiles = await LoadUnsafeAsync(cancellationToken).ConfigureAwait(false);
-            var existing = profiles.FindIndex(x => x.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+            var normalizedProfile = validation.Profile;
+            var existing = profiles.FindIndex(x => x.Name.Equals(normalizedProfile.Name, StringComparison.OrdinalIgnoreCase));
             if (existing >= 0)
             {
-                profiles[existing] = profile;
+                profiles[existing] = normalizedProfile;
             }
             else
             {
-                profiles.Add(profile);
+                profiles.Add(normalizedProfile);
             }
 
             await PersistUnsafeAsync(profiles, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("Launch profile {ProfileName} saved.", profile.Name);
+            _logger.LogInformation("Launch profile {ProfileName} saved for {ExecutablePath}.", normalizedProfile.Name, normalizedProfile.ExecutablePath);
         }
         finally
         {
@@ -107,12 +109,35 @@ public sealed class DesktopLaunchProfileService
 
         if (load.Value is not null)
         {
+            var validProfiles = new List<DesktopLaunchProfile>(load.Value.Count);
+            var invalidProfiles = new List<string>();
+            foreach (var profile in load.Value)
+            {
+                var validation = DesktopLaunchProfilePolicy.ValidateForPersistence(profile);
+                if (!validation.IsValid || validation.Profile is null)
+                {
+                    invalidProfiles.Add($"{profile.Name}: {validation.Error}");
+                    continue;
+                }
+
+                validProfiles.Add(validation.Profile);
+            }
+
+            if (invalidProfiles.Count > 0)
+            {
+                var invalidDiagnostic = $"Ignored invalid launch profiles: {string.Join(" | ", invalidProfiles)}";
+                LastLoadDiagnostic = string.IsNullOrWhiteSpace(LastLoadDiagnostic)
+                    ? invalidDiagnostic
+                    : $"{LastLoadDiagnostic} {invalidDiagnostic}";
+                _logger.LogWarning(invalidDiagnostic);
+            }
+
             if (!string.IsNullOrWhiteSpace(load.Diagnostic))
             {
                 _logger.LogWarning("Launch profiles loaded with recovery diagnostic: {Diagnostic}", load.Diagnostic);
             }
 
-            return load.Value;
+            return validProfiles;
         }
 
         _logger.LogError("Launch profiles load failed: {Diagnostic}", LastLoadDiagnostic);
