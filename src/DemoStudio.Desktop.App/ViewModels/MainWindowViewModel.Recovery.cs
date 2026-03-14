@@ -9,46 +9,39 @@ public sealed partial class MainWindowViewModel
     {
         try
         {
-            var draft = new DesktopSessionDraft(
-                SessionId: _snapshot.SessionId,
-                State: _snapshot.State,
-                SavedUtc: DateTimeOffset.UtcNow,
-                CaptureMode: CaptureMode,
-                WindowTitleContains: string.IsNullOrWhiteSpace(WindowTitleContains) ? null : WindowTitleContains.Trim(),
-                CaptureNarration: CaptureNarration,
-                MicrophoneDeviceName: string.IsNullOrWhiteSpace(MicrophoneDeviceName) ? null : MicrophoneDeviceName.Trim(),
-                QualityPreset: SelectedComposeQualityPreset,
-                ExportStyle: SelectedExportStyle,
-                AiProvider: string.IsNullOrWhiteSpace(AiNarrationProvider) ? null : AiNarrationProvider.Trim(),
-                AiBaseUrl: string.IsNullOrWhiteSpace(AiNarrationBaseUrl) ? null : AiNarrationBaseUrl.Trim(),
-                AiModel: string.IsNullOrWhiteSpace(AiNarrationModel) ? null : AiNarrationModel.Trim(),
-                AiVoice: string.IsNullOrWhiteSpace(AiNarrationVoice) ? null : AiNarrationVoice.Trim(),
-                AiAutoTrimScript: AiAutoTrimScript,
-                AiWordsPerSecond: AiWordsPerSecond,
-                LastOutputPath: _lastOutputPath,
-                Clips: CurrentSessionClips
-                    .OrderBy(x => x.Order)
-                    .Select(x => new DesktopSessionDraftClip(
-                        x.Sequence,
-                        x.Order,
-                        x.Label,
-                        x.BannerText,
-                        x.DurationDisplay,
-                        x.StartSeconds,
-                        x.DurationSeconds,
-                        x.IncludeNarration,
-                        x.NarrationAudioPath,
-                        x.NarrationSource,
-                        x.NarrationScript))
-                    .ToArray());
-            var fingerprint = BuildDraftFingerprint(draft);
-            if (string.Equals(fingerprint, _lastDraftFingerprint, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            await _sessionRecoveryService.SaveAsync(draft);
-            _lastDraftFingerprint = fingerprint;
+            _lastDraftFingerprint = await _draftSessionUseCase.SaveAsync(
+                new DesktopDraftSessionState(
+                    _snapshot.SessionId,
+                    _snapshot.State,
+                    CaptureMode,
+                    WindowTitleContains,
+                    CaptureNarration,
+                    MicrophoneDeviceName,
+                    SelectedComposeQualityPreset,
+                    SelectedExportStyle,
+                    AiNarrationProvider,
+                    AiNarrationBaseUrl,
+                    AiNarrationModel,
+                    AiNarrationVoice,
+                    AiAutoTrimScript,
+                    AiWordsPerSecond,
+                    _lastOutputPath,
+                    CurrentSessionClips
+                        .OrderBy(x => x.Order)
+                        .Select(x => new DesktopDraftClipState(
+                            x.Sequence,
+                            x.Order,
+                            x.Label,
+                            x.BannerText,
+                            x.DurationDisplay,
+                            x.StartSeconds,
+                            x.DurationSeconds,
+                            x.IncludeNarration,
+                            x.NarrationAudioPath,
+                            x.NarrationSource,
+                            x.NarrationScript))
+                        .ToArray()),
+                _lastDraftFingerprint);
         }
         catch (Exception ex)
         {
@@ -62,30 +55,31 @@ public sealed partial class MainWindowViewModel
 
     private async Task RestoreDraftStateAsync()
     {
-        var draft = await _sessionRecoveryService.TryLoadAsync();
-        if (draft is null)
+        var restore = await _draftSessionUseCase.RestoreAsync();
+        if (!restore.Restored || restore.Draft is null)
         {
-            if (!string.IsNullOrWhiteSpace(_sessionRecoveryService.LastLoadDiagnostic))
+            if (!string.IsNullOrWhiteSpace(restore.RuntimeMessage))
             {
-                _lastRuntimeMessage = _sessionRecoveryService.LastLoadDiagnostic;
+                _lastRuntimeMessage = restore.RuntimeMessage;
                 OnPropertyChanged(nameof(LastRuntimeMessage));
             }
             return;
         }
 
+        var draft = restore.Draft;
         CaptureMode = draft.CaptureMode;
-        WindowTitleContains = draft.WindowTitleContains ?? string.Empty;
+        WindowTitleContains = draft.WindowTitleContains;
         CaptureNarration = draft.CaptureNarration;
-        MicrophoneDeviceName = draft.MicrophoneDeviceName ?? string.Empty;
+        MicrophoneDeviceName = draft.MicrophoneDeviceName;
         SelectedComposeQualityPreset = draft.QualityPreset;
         SelectedExportStyle = draft.ExportStyle;
-        AiNarrationProvider = draft.AiProvider ?? "OpenAI";
-        AiNarrationBaseUrl = draft.AiBaseUrl ?? string.Empty;
-        AiNarrationModel = draft.AiModel ?? "gpt-4o-mini-tts";
-        AiNarrationVoice = draft.AiVoice ?? "alloy";
+        AiNarrationProvider = draft.AiProvider;
+        AiNarrationBaseUrl = draft.AiBaseUrl;
+        AiNarrationModel = draft.AiModel;
+        AiNarrationVoice = draft.AiVoice;
         AiNarrationApiKey = string.Empty;
         AiAutoTrimScript = draft.AiAutoTrimScript;
-        AiWordsPerSecond = draft.AiWordsPerSecond <= 0d ? 2.6d : draft.AiWordsPerSecond;
+        AiWordsPerSecond = draft.AiWordsPerSecond;
 
         if (!string.IsNullOrWhiteSpace(draft.LastOutputPath))
         {
@@ -115,21 +109,19 @@ public sealed partial class MainWindowViewModel
         if (CurrentSessionClips.Count > 0)
         {
             IsClipCurationExpanded = true;
-            _lastRuntimeMessage = string.IsNullOrWhiteSpace(_sessionRecoveryService.LastLoadDiagnostic)
-                ? "Recovered previous draft session."
-                : $"Recovered previous draft session. {_sessionRecoveryService.LastLoadDiagnostic}";
+            _lastRuntimeMessage = restore.RuntimeMessage;
             OnPropertyChanged(nameof(LastRuntimeMessage));
             _ = GenerateMissingClipThumbnailsAsync(draft.LastOutputPath, draft.SessionId);
         }
 
-        _lastDraftFingerprint = BuildDraftFingerprint(draft);
+        _lastDraftFingerprint = restore.Fingerprint;
         RaiseWorkflowAndClipState();
     }
 
     private async Task ClearDraftStateAsync()
     {
         _lastDraftFingerprint = string.Empty;
-        await _sessionRecoveryService.ClearAsync();
+        await _draftSessionUseCase.ClearAsync();
     }
 
     private static string BuildFixHint(string? failureCode)
@@ -144,28 +136,4 @@ public sealed partial class MainWindowViewModel
         };
     }
 
-    private static string BuildDraftFingerprint(DesktopSessionDraft draft)
-    {
-        var clipPart = string.Join("|", draft.Clips.Select(x =>
-            $"{x.Sequence}:{x.Order}:{x.Label}:{x.BannerText}:{x.DurationDisplay}:{x.StartSeconds:0.###}:{x.DurationSeconds:0.###}:{x.IncludeNarration}:{x.NarrationAudioPath}:{x.NarrationSource}:{x.NarrationScript}"));
-        return string.Join(";", new[]
-        {
-            draft.SessionId.ToString("N"),
-            draft.State.ToString(),
-            draft.CaptureMode,
-            draft.WindowTitleContains ?? string.Empty,
-            draft.CaptureNarration.ToString(),
-            draft.MicrophoneDeviceName ?? string.Empty,
-            draft.QualityPreset,
-            draft.ExportStyle,
-            draft.AiProvider ?? string.Empty,
-            draft.AiBaseUrl ?? string.Empty,
-            draft.AiModel ?? string.Empty,
-            draft.AiVoice ?? string.Empty,
-            draft.AiAutoTrimScript.ToString(),
-            draft.AiWordsPerSecond.ToString("0.###"),
-            draft.LastOutputPath ?? string.Empty,
-            clipPart
-        });
-    }
 }

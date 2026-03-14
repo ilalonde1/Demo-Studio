@@ -143,15 +143,15 @@ public sealed partial class MainWindowViewModel
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            if (IsStageMode)
-            {
-                _ = await EnsureStageWorkspaceReadyAsync(bringToFront: false);
-            }
-
-            var report = await BuildAndRunPreflightAsync();
-            PreflightStatus = report.ToDisplayText();
-            ReadinessLastChecked = $"Last checked: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}";
-            _lastRuntimeMessage = PreflightStatus;
+            var result = await _preflightChecksUseCase.RunAsync(
+                new DesktopPreflightChecksRequest(
+                    IsStageMode,
+                    EnsureStageWorkspaceReadyAsync,
+                    BuildAndRunPreflightAsync),
+                updateReadinessTimestamp: true);
+            PreflightStatus = result.StatusText;
+            ReadinessLastChecked = result.ReadinessLastChecked ?? ReadinessLastChecked;
+            _lastRuntimeMessage = result.RuntimeMessage;
             OnPropertyChanged(nameof(PreflightStatus));
             OnPropertyChanged(nameof(ReadinessLastChecked));
             OnPropertyChanged(nameof(LastRuntimeMessage));

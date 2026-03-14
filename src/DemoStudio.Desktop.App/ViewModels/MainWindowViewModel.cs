@@ -31,6 +31,12 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly DesktopSessionRecoveryService _sessionRecoveryService;
     private readonly DesktopPresenterViewService _presenterViewService;
     private readonly DesktopProcessRunner _processRunner;
+    private readonly DesktopRuntimeInitializationUseCase _runtimeInitializationUseCase;
+    private readonly DesktopPreflightChecksUseCase _preflightChecksUseCase;
+    private readonly DesktopCaptureSessionUseCase _captureSessionUseCase;
+    private readonly DesktopComposeOutputUseCase _composeOutputUseCase;
+    private readonly DesktopDraftSessionUseCase _draftSessionUseCase;
+    private readonly DesktopSessionLifecycleUseCase _sessionLifecycleUseCase;
     private readonly HealthMonitorViewModel _healthMonitor;
     private readonly PublishWorkflowViewModel _publishWorkflow;
     private readonly CaptureSessionViewModel _captureSession;
@@ -173,6 +179,16 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             _ffmpegOperationQueue,
             _captureRuntime);
         _publishWorkflow.AttachProductionWorkspace(_production);
+        _preflightChecksUseCase = new DesktopPreflightChecksUseCase();
+        _runtimeInitializationUseCase = new DesktopRuntimeInitializationUseCase();
+        _captureSessionUseCase = new DesktopCaptureSessionUseCase(_preflightChecksUseCase);
+        _composeOutputUseCase = new DesktopComposeOutputUseCase(
+            _composeManifestService,
+            _videoComposeService,
+            _ffmpegOperationQueue,
+            _captureRuntime);
+        _draftSessionUseCase = new DesktopDraftSessionUseCase(_sessionRecoveryService);
+        _sessionLifecycleUseCase = new DesktopSessionLifecycleUseCase();
         _snapshot = _sessionEngine.Snapshot();
         _liveClipTimer = new DispatcherTimer
         {
@@ -212,18 +228,26 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
                 return MainWindowInitializationResult.Success();
             }
 
-            var failures = new List<string>();
-            await TryInitializeStepAsync("Window catalog", () =>
-            {
-                RefreshWindowCandidates();
-                return Task.CompletedTask;
-            }, failures);
-            await TryInitializeStepAsync("Launch profiles", RefreshLaunchProfilesAsync, failures);
-            await TryInitializeStepAsync("Preflight", RunPreflightAsync, failures);
-            await TryInitializeStepAsync("Session history", RefreshSessionHistoryAsync, failures);
-            await TryInitializeStepAsync("Demo templates", RefreshDemoTemplatesAsync, failures);
-            await TryInitializeStepAsync("Session recovery", RestoreDraftStateAsync, failures);
-            await TryInitializeStepAsync("Dependency health", () => RefreshDependencyHealthAsync(force: true), failures);
+            var initialization = await _runtimeInitializationUseCase.InitializeAsync(
+                new (string StepName, Func<Task> Step)[]
+                {
+                    ("Window catalog", () =>
+                    {
+                        RefreshWindowCandidates();
+                        return Task.CompletedTask;
+                    }),
+                    ("Launch profiles", RefreshLaunchProfilesAsync),
+                    ("Preflight", RunPreflightAsync),
+                    ("Session history", RefreshSessionHistoryAsync),
+                    ("Demo templates", RefreshDemoTemplatesAsync),
+                    ("Session recovery", RestoreDraftStateAsync),
+                    ("Dependency health", () => RefreshDependencyHealthAsync(force: true))
+                },
+                (stepName, ex) => ReportBackgroundFailureAsync(
+                    "DS-DESK-INIT-001",
+                    $"Startup step failed: {stepName}.",
+                    ex,
+                    TimeSpan.FromSeconds(2)));
 
             _onboarding.Initialize();
             OnPropertyChanged(nameof(IsOnboardingVisible));
@@ -239,30 +263,11 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             }
 
             _isInitialized = true;
-            return failures.Count == 0
-                ? MainWindowInitializationResult.Success()
-                : new MainWindowInitializationResult(false, failures);
+            return initialization;
         }
         finally
         {
             _initializeGate.Release();
-        }
-    }
-
-    private async Task TryInitializeStepAsync(string stepName, Func<Task> step, List<string> failures)
-    {
-        try
-        {
-            await step();
-        }
-        catch (Exception ex)
-        {
-            failures.Add($"{stepName}: {ex.Message}");
-            await ReportBackgroundFailureAsync(
-                "DS-DESK-INIT-001",
-                $"Startup step failed: {stepName}.",
-                ex,
-                TimeSpan.FromSeconds(2));
         }
     }
 

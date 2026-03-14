@@ -11,11 +11,13 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        _curation.ResetSessionState();
-        _sessionState.ResetForSessionRestart();
-        _production.ResetSessionOutputs();
-        _snapshot = _sessionEngine.Reset();
-        await ClearDraftStateAsync();
+        _lastRuntimeMessage = await _sessionLifecycleUseCase.ResetSessionAsync(
+            _sessionEngine,
+            ClearDraftStateAsync,
+            _curation.ResetSessionState,
+            _sessionState.ResetForSessionRestart,
+            _production.ResetSessionOutputs);
+        _snapshot = _sessionEngine.Snapshot();
         _lastRuntimeMessage = "Started a new session. Previous draft was cleared.";
         RaiseWorkflowAndClipState();
     }
@@ -39,12 +41,13 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        _curation.ResetSessionState();
-        _sessionState.ResetForSessionRestart();
-        _production.ResetSessionOutputs();
-        _snapshot = _sessionEngine.Reset();
-        await ClearDraftStateAsync();
-        _lastRuntimeMessage = "Session closed.";
+        _lastRuntimeMessage = await _sessionLifecycleUseCase.ResetSessionAsync(
+            _sessionEngine,
+            ClearDraftStateAsync,
+            _curation.ResetSessionState,
+            _sessionState.ResetForSessionRestart,
+            _production.ResetSessionOutputs);
+        _snapshot = _sessionEngine.Snapshot();
         RaiseWorkflowAndClipState();
     }
 }

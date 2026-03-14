@@ -194,61 +194,32 @@ public sealed partial class MainWindowViewModel
         SetBusy(true);
         try
         {
-            var manifest = new DesktopComposeManifest(
-                SessionId: _lastFinalizedSessionId != Guid.Empty ? _lastFinalizedSessionId : _snapshot.SessionId,
-                RawVideoPath: _lastOutputPath,
-                GeneratedUtc: DateTimeOffset.UtcNow,
-                Clips: CurrentSessionClips
-                    .OrderBy(x => x.Order)
-                    .Select(x => new DesktopComposeClip(
-                        x.Order,
-                        x.Sequence,
-                        x.Label,
-                        string.IsNullOrWhiteSpace(x.BannerText) ? null : x.BannerText.Trim(),
-                        x.StartSeconds,
-                        x.DurationSeconds,
-                        x.DurationDisplay,
-                        x.IncludeNarration,
-                        x.NarrationAudioPath))
-                    .ToArray(),
-                QualityPreset: SelectedComposeQualityPreset,
-                ExportStyle: SelectedExportStyle);
+            var composeResult = await _composeOutputUseCase.ComposeAsync(
+                new DesktopComposeOutputRequest(
+                    _lastFinalizedSessionId != Guid.Empty ? _lastFinalizedSessionId : _snapshot.SessionId,
+                    _lastOutputPath,
+                    CurrentSessionClips
+                        .OrderBy(x => x.Order)
+                        .Select(x => new DesktopComposeOutputClip(
+                            x.Order,
+                            x.Sequence,
+                            x.Label,
+                            string.IsNullOrWhiteSpace(x.BannerText) ? null : x.BannerText.Trim(),
+                            x.StartSeconds,
+                            x.DurationSeconds,
+                            x.DurationDisplay,
+                            x.IncludeNarration,
+                            x.NarrationAudioPath))
+                        .ToArray(),
+                    SelectedComposeQualityPreset,
+                    SelectedExportStyle,
+                    _lifecycleCancellation.Token));
 
-            var manifestResult = _composeManifestService.WriteManifest(manifest);
-            if (!manifestResult.Succeeded)
-            {
-                ComposeStatus = manifestResult.Message;
-                _lastRuntimeMessage = manifestResult.Message;
-                OnPropertyChanged(nameof(ComposeStatus));
-                OnPropertyChanged(nameof(LastRuntimeMessage));
-                return;
-            }
-
-            var queuedCompose = await _ffmpegOperationQueue.EnqueueAsync(
-                "Build Final Video",
-                ct => _videoComposeService.ComposeAsync(manifest, _captureRuntime.FfmpegPath, ct),
-                _lifecycleCancellation.Token);
-            if (!queuedCompose.Accepted || queuedCompose.Value is null)
-            {
-                ComposeStatus = string.IsNullOrWhiteSpace(queuedCompose.Message)
-                    ? "Compose skipped: render queue is full."
-                    : queuedCompose.Message;
-                _lastRuntimeMessage = ComposeStatus;
-                OnPropertyChanged(nameof(ComposeStatus));
-                OnPropertyChanged(nameof(LastRuntimeMessage));
-                return;
-            }
-
-            var composeResult = queuedCompose.Value;
-            ComposeStatus = composeResult.Message;
-            _lastRuntimeMessage = composeResult.Message;
-            if (queuedCompose.QueueDelay > TimeSpan.FromMilliseconds(200))
-            {
-                _lastRuntimeMessage = $"{composeResult.Message} (queued {queuedCompose.QueueDelay.TotalSeconds:0.0}s)";
-            }
+            ComposeStatus = composeResult.ComposeStatus;
+            _lastRuntimeMessage = composeResult.RuntimeMessage;
             if (composeResult.Succeeded && !string.IsNullOrWhiteSpace(composeResult.OutputPath))
             {
-                _lastOutputPath = composeResult.OutputPath;
+                _lastOutputPath = composeResult.OutputPath!;
                 OnPropertyChanged(nameof(LastOutputPath));
             }
 
