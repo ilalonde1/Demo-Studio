@@ -1,31 +1,23 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
-using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.App.Services;
 
 namespace DemoStudio.Desktop.App.ViewModels;
 
 public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
 {
-    private readonly DesktopPublishPackageService _publishPackageService;
-    private readonly DesktopProcessRunner _processRunner;
-    private readonly DesktopFfmpegOperationQueue _ffmpegOperationQueue;
-    private readonly DesktopCaptureRuntime _captureRuntime;
+    private readonly IDesktopPublishWorkflowUseCase _publishWorkflowUseCase;
+    private readonly IDesktopShellIntegrationUseCase _shellIntegrationUseCase;
     private ProductionWorkspaceViewModel? _production;
 
     public PublishWorkflowViewModel(
-        DesktopPublishPackageService publishPackageService,
-        DesktopProcessRunner processRunner,
-        DesktopFfmpegOperationQueue ffmpegOperationQueue,
-        DesktopCaptureRuntime captureRuntime)
+        IDesktopPublishWorkflowUseCase publishWorkflowUseCase,
+        IDesktopShellIntegrationUseCase shellIntegrationUseCase)
     {
-        _publishPackageService = publishPackageService ?? throw new ArgumentNullException(nameof(publishPackageService));
-        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
-        _ffmpegOperationQueue = ffmpegOperationQueue ?? throw new ArgumentNullException(nameof(ffmpegOperationQueue));
-        _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
+        _publishWorkflowUseCase = publishWorkflowUseCase ?? throw new ArgumentNullException(nameof(publishWorkflowUseCase));
+        _shellIntegrationUseCase = shellIntegrationUseCase ?? throw new ArgumentNullException(nameof(shellIntegrationUseCase));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -57,7 +49,7 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
     }
 
     public async Task CreatePublishPackageAsync(
-        PublishWorkflowContext context,
+        DesktopPublishWorkflowRequest context,
         CancellationToken cancellationToken,
         Action<bool> setBusy,
         Action<string> setLastRuntimeMessage,
@@ -74,55 +66,16 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
         setBusy(true);
         try
         {
-            var sourceVideo = context.LastOutputPath;
-            var record = context.SessionHistory.FirstOrDefault(x => x.SessionId == context.LastFinalizedSessionId)
-                         ?? context.SelectedSessionRecord;
-
-            var request = new DesktopPublishPackageRequest(
-                SessionId: context.LastFinalizedSessionId == Guid.Empty ? (record?.SessionId ?? Guid.NewGuid()) : context.LastFinalizedSessionId,
-                SourceVideoPath: sourceVideo,
-                OutputRoot: DesktopStoragePaths.GetPublishDirectory(_captureRuntime.StorageRoot),
-                Title: record is null ? "DemoStudio Recording" : $"Demo {record.SessionId:N}",
-                Description: string.IsNullOrWhiteSpace(record?.ClipSummary) ? "Curated demo output package." : record!.ClipSummary!,
-                QualityPreset: context.SelectedComposeQualityPreset,
-                ExportStyle: context.SelectedExportStyle,
-                ClipCount: record?.ClipCount ?? context.CurrentSessionClips.Count,
-                DurationSeconds: record?.DurationSeconds ?? context.CurrentSessionClips.Sum(x => x.DurationSeconds),
-                StartedUtc: record?.StartedUtc ?? DateTimeOffset.UtcNow,
-                CompletedUtc: record?.CompletedUtc);
-
-            var queuedPublish = await _ffmpegOperationQueue.EnqueueAsync(
-                "Publish Package",
-                ct => _publishPackageService.CreateAsync(request, _captureRuntime.FfmpegPath, ct),
-                cancellationToken);
-            if (!queuedPublish.Accepted || queuedPublish.Value is null)
-            {
-                var rejection = string.IsNullOrWhiteSpace(queuedPublish.Message)
-                    ? "Publish package skipped: render queue is full."
-                    : queuedPublish.Message;
-                production.PublishStatus = rejection;
-                setLastRuntimeMessage(rejection);
-                setSessionHistoryStatus(rejection);
-                return;
-            }
-
-            var result = queuedPublish.Value;
-            production.PublishStatus = result.Message;
-            setLastRuntimeMessage(result.Message);
-            setSessionHistoryStatus(result.Message);
-            if (queuedPublish.QueueDelay > TimeSpan.FromMilliseconds(200))
-            {
-                setLastRuntimeMessage($"{result.Message} (queued {queuedPublish.QueueDelay.TotalSeconds:0.0}s)");
-            }
+            var result = await _publishWorkflowUseCase.CreateAsync(context, cancellationToken);
+            production.PublishStatus = result.PublishStatus;
+            setLastRuntimeMessage(result.RuntimeMessage);
+            setSessionHistoryStatus(result.SessionHistoryStatus);
 
             if (result.Succeeded && !string.IsNullOrWhiteSpace(result.PackagePath))
             {
-                production.LastPublishPackagePath = result.PackagePath;
-                production.ShareSummary = $"Demo package ready: {Path.GetFileName(result.PackagePath)}";
-                _processRunner.StartDetached(new ProcessStartInfo("explorer.exe", $"/select,\"{result.PackagePath}\"")
-                {
-                    UseShellExecute = true
-                });
+                production.LastPublishPackagePath = result.PackagePath!;
+                production.ShareSummary = result.ShareSummary ?? $"Demo package ready: {Path.GetFileName(result.PackagePath)}";
+                _ = _shellIntegrationUseCase.RevealPath(result.PackagePath!);
             }
         }
         catch (Exception ex)
@@ -162,10 +115,11 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
 
         try
         {
-            _processRunner.StartDetached(new ProcessStartInfo("explorer.exe", $"/select,\"{LastPublishPackagePath}\"")
+            var openResult = _shellIntegrationUseCase.RevealPath(LastPublishPackagePath);
+            if (!openResult.Succeeded)
             {
-                UseShellExecute = true
-            });
+                throw new InvalidOperationException(openResult.Message);
+            }
         }
         catch (Exception ex)
         {
@@ -181,10 +135,12 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
 
         try
         {
-            _processRunner.StartDetached(new ProcessStartInfo("explorer.exe", $"/select,\"{healthPath}\"")
+            var openResult = _shellIntegrationUseCase.RevealPath(healthPath);
+            if (!openResult.Succeeded)
             {
-                UseShellExecute = true
-            });
+                throw new InvalidOperationException(openResult.Message);
+            }
+
             setLastRuntimeMessage("Opened compose health snapshot.");
         }
         catch (Exception ex)
@@ -194,28 +150,7 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
     }
 
     public string GetComposeHealthPath(string? lastOutputPath, DesktopSessionRecord? selectedSessionRecord)
-    {
-        if (!string.IsNullOrWhiteSpace(lastOutputPath) && lastOutputPath != "-" && File.Exists(lastOutputPath))
-        {
-            var outputDirectory = Path.GetDirectoryName(lastOutputPath);
-            if (!string.IsNullOrWhiteSpace(outputDirectory))
-            {
-                return Path.Combine(outputDirectory, "compose-health.json");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(selectedSessionRecord?.RawVideoPath))
-        {
-            var rawDirectory = Path.GetDirectoryName(selectedSessionRecord.RawVideoPath!);
-            if (!string.IsNullOrWhiteSpace(rawDirectory))
-            {
-                return DesktopStoragePaths.GetComposeHealthPath(
-                    DesktopStoragePaths.GetCuratedDirectory(selectedSessionRecord.RawVideoPath!));
-            }
-        }
-
-        return Path.Combine(_captureRuntime.StorageRoot, "compose-health.json");
-    }
+        => _publishWorkflowUseCase.GetComposeHealthPath(lastOutputPath, selectedSessionRecord);
 
     private ProductionWorkspaceViewModel RequireProduction()
     {
@@ -243,12 +178,3 @@ public sealed class PublishWorkflowViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
-
-public sealed record PublishWorkflowContext(
-    Guid LastFinalizedSessionId,
-    string LastOutputPath,
-    string SelectedComposeQualityPreset,
-    string SelectedExportStyle,
-    IReadOnlyList<CurrentSessionClipItem> CurrentSessionClips,
-    IReadOnlyList<DesktopSessionRecord> SessionHistory,
-    DesktopSessionRecord? SelectedSessionRecord);

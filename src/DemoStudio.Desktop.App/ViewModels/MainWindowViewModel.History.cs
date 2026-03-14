@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.Core.Sessions;
@@ -10,20 +9,20 @@ public sealed partial class MainWindowViewModel
 {
     private async Task RefreshSessionHistoryAsync()
     {
-        var history = await _sessionHistoryService.ListAsync();
+        var history = await _sessionHistoryUseCase.ListAsync();
         SessionHistory.Clear();
-        foreach (var record in history)
+        foreach (var record in history.Records)
         {
             SessionHistory.Add(record);
         }
 
         SelectedSessionRecord = SessionHistory.FirstOrDefault();
-        SessionHistoryStatus = history.Count == 0
+        SessionHistoryStatus = history.Records.Count == 0
             ? "No recorded sessions yet."
-            : $"Loaded {history.Count} session records.";
-        if (!string.IsNullOrWhiteSpace(_sessionHistoryService.LastLoadDiagnostic))
+            : $"Loaded {history.Records.Count} session records.";
+        if (!string.IsNullOrWhiteSpace(history.LoadDiagnostic))
         {
-            SessionHistoryStatus += $" Warning: {_sessionHistoryService.LastLoadDiagnostic}";
+            SessionHistoryStatus += $" Warning: {history.LoadDiagnostic}";
         }
         OnPropertyChanged(nameof(SessionHistoryStatus));
         OnPropertyChanged(nameof(SessionHistory));
@@ -40,27 +39,10 @@ public sealed partial class MainWindowViewModel
         try
         {
             var rawPath = SelectedSessionRecord.RawVideoPath!;
-            if (File.Exists(rawPath))
-            {
-                _processRunner.StartDetached(new ProcessStartInfo("explorer.exe", $"/select,\"{rawPath}\"")
-                {
-                    UseShellExecute = true
-                });
-                return;
-            }
-
-            var folder = Path.GetDirectoryName(rawPath);
-            if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
-            {
-                _processRunner.StartDetached(new ProcessStartInfo
-                {
-                    FileName = folder,
-                    UseShellExecute = true
-                });
-                return;
-            }
-
-            SessionHistoryStatus = "Selected session path was not found on disk.";
+            var openResult = _shellIntegrationUseCase.RevealPath(rawPath);
+            SessionHistoryStatus = openResult.Succeeded
+                ? SessionHistoryStatus
+                : openResult.Message;
             OnPropertyChanged(nameof(SessionHistoryStatus));
         }
         catch (Exception ex)
@@ -82,27 +64,10 @@ public sealed partial class MainWindowViewModel
                 return;
             }
 
-            if (File.Exists(rawPath))
-            {
-                _processRunner.StartDetached(new ProcessStartInfo("explorer.exe", $"/select,\"{rawPath}\"")
-                {
-                    UseShellExecute = true
-                });
-                return;
-            }
-
-            var folder = Path.GetDirectoryName(rawPath);
-            if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
-            {
-                _processRunner.StartDetached(new ProcessStartInfo
-                {
-                    FileName = folder,
-                    UseShellExecute = true
-                });
-                return;
-            }
-
-            SessionHistoryStatus = "Latest output path was not found on disk.";
+            var openResult = _shellIntegrationUseCase.RevealPath(rawPath);
+            SessionHistoryStatus = openResult.Succeeded
+                ? SessionHistoryStatus
+                : openResult.Message;
             OnPropertyChanged(nameof(SessionHistoryStatus));
         }
         catch (Exception ex)
@@ -130,7 +95,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        var result = await _sessionHistoryService.DeleteAsync(sessionId, deleteArtifacts: true);
+        var result = await _sessionHistoryUseCase.DeleteAsync(sessionId, deleteArtifacts: true);
         if (result.Succeeded)
         {
             SessionHistoryStatus = result.Message;
@@ -211,7 +176,7 @@ public sealed partial class MainWindowViewModel
             DiagnosticsPath: status == "Failed" ? _lastDiagnosticsPath : null,
             FixHint: status == "Failed" ? BuildFixHint(_lastFailureCode) : null);
 
-        await _sessionHistoryService.UpsertAsync(record);
+        await _sessionHistoryUseCase.UpsertAsync(record);
         _lastFinalizedSessionId = finalizedSnapshot.SessionId;
     }
 

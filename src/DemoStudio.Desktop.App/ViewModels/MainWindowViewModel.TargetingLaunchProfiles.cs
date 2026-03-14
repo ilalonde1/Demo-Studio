@@ -13,14 +13,15 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        _targeting.ReplaceLaunchProfiles((await _launchProfileService.ListAsync()).ToList());
+        var profiles = await _targetingUseCase.ListLaunchProfilesAsync();
+        _targeting.ReplaceLaunchProfiles(profiles.Profiles.ToList());
         SelectedLaunchProfile = LaunchProfiles.FirstOrDefault();
         LaunchStatus = LaunchProfiles.Count == 0
             ? "No saved launch profiles."
             : $"Loaded {LaunchProfiles.Count} launch profiles.";
-        if (!string.IsNullOrWhiteSpace(_launchProfileService.LastLoadDiagnostic))
+        if (!string.IsNullOrWhiteSpace(profiles.LoadDiagnostic))
         {
-            LaunchStatus += $" Warning: {_launchProfileService.LastLoadDiagnostic}";
+            LaunchStatus += $" Warning: {profiles.LoadDiagnostic}";
         }
         OnPropertyChanged(nameof(LaunchProfiles));
         OnPropertyChanged(nameof(LaunchStatus));
@@ -35,7 +36,7 @@ public sealed partial class MainWindowViewModel
         }
 
         var profile = BuildLaunchProfileFromFields();
-        await _launchProfileService.SaveAsync(profile);
+        await _targetingUseCase.SaveLaunchProfileAsync(profile);
         await RefreshLaunchProfilesAsync();
         SelectedLaunchProfile = LaunchProfiles.FirstOrDefault(x => x.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
         LaunchStatus = $"Saved launch profile '{profile.Name}'.";
@@ -60,7 +61,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        await _launchProfileService.DeleteAsync(name);
+        await _targetingUseCase.DeleteLaunchProfileAsync(name);
         await RefreshLaunchProfilesAsync();
         LaunchStatus = $"Deleted launch profile '{name}'.";
         OnPropertyChanged(nameof(LaunchStatus));
@@ -105,7 +106,7 @@ public sealed partial class MainWindowViewModel
         SetBusy(true);
         try
         {
-            var result = await _targetLauncher.LaunchAsync(BuildLaunchProfileFromFields());
+            var result = await _targetingUseCase.LaunchAsync(BuildLaunchProfileFromFields());
             LaunchStatus = result.Message;
             _lastRuntimeMessage = result.Succeeded ? "Target launched. Refresh window picker and lock target." : result.Message;
             OnPropertyChanged(nameof(LaunchStatus));
@@ -164,6 +165,6 @@ public sealed partial class MainWindowViewModel
 
     private Task<DesktopPreflightReport> BuildAndRunPreflightAsync()
     {
-        return _preflightService.RunAsync(_captureRuntime, BuildTargetSettings(), BuildLaunchProfileFromFields());
+        return _targetingUseCase.RunPreflightAsync(_captureRuntime, BuildTargetSettings(), BuildLaunchProfileFromFields());
     }
 }

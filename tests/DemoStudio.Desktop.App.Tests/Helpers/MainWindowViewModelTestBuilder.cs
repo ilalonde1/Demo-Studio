@@ -38,6 +38,48 @@ internal static class MainWindowViewModelTestBuilder
             processLauncher,
             NullLogger<FfmpegVideoCaptureService>.Instance);
         var captureRuntime = new DesktopCaptureRuntime(options, processLauncher, captureFactory, windowLocator);
+        var launchProfileService = new DesktopLaunchProfileService(root);
+        var targetLauncher = new DesktopTargetLauncher(processLauncher);
+        var preflightService = new DesktopCapturePreflightService(windowLocator);
+        var windowFocusService = new DesktopWindowFocusService(windowLocator);
+        var sessionHistoryService = new DesktopSessionHistoryService(root);
+        var diagnosticsBundleService = new DesktopDiagnosticsBundleService(root);
+        var ffmpegOperationQueue = new DesktopFfmpegOperationQueue();
+        var targetingUseCase = new DesktopTargetingUseCase(
+            new DesktopWindowCatalogService(),
+            launchProfileService,
+            targetLauncher,
+            preflightService,
+            windowFocusService);
+        var sessionHistoryUseCase = new DesktopSessionHistoryUseCase(sessionHistoryService);
+        var shellIntegrationUseCase = new DesktopShellIntegrationUseCase(processRunner);
+        var failureDiagnosticsUseCase = new DesktopFailureDiagnosticsUseCase(diagnosticsBundleService);
+        var preflightChecksUseCase = new DesktopPreflightChecksUseCase();
+        var captureSessionUseCase = new DesktopCaptureSessionUseCase(preflightChecksUseCase);
+        var composeOutputUseCase = new DesktopComposeOutputUseCase(
+            new DesktopComposeManifestService(),
+            new DesktopVideoComposeService(new NoOpProcessLauncher()),
+            ffmpegOperationQueue,
+            captureRuntime);
+        var draftSessionUseCase = new DesktopDraftSessionUseCase(new DesktopSessionRecoveryService(root));
+        var sessionLifecycleUseCase = new DesktopSessionLifecycleUseCase();
+        var captureSessionViewModel = new CaptureSessionViewModel(
+            sessionEngine,
+            captureRuntime,
+            windowFocusService,
+            new DesktopPresenterViewService(),
+            new DesktopClipCurationCoordinator());
+        var publishWorkflowViewModel = new PublishWorkflowViewModel(
+            new DesktopPublishWorkflowUseCase(
+                new DesktopPublishPackageService(new NoOpProcessLauncher()),
+                ffmpegOperationQueue,
+                captureRuntime),
+            shellIntegrationUseCase);
+        var healthMonitorViewModel = new HealthMonitorViewModel(
+            new DesktopDependencyHealthService(captureRuntime, processLauncher),
+            new DesktopPerformanceMetricsService(),
+            new DesktopSmokeCheckService(root, "ffmpeg", processLauncher, captureFactory),
+            captureRuntime);
 
         // All constructor parameters are required. If the constructor signature
         // changes, this builder will fail to compile  update it before adding
@@ -45,23 +87,9 @@ internal static class MainWindowViewModelTestBuilder
         return new MainWindowViewModel(
             sessionEngine: sessionEngine,
             captureRuntime: captureRuntime,
-            windowCatalogService: new DesktopWindowCatalogService(),
-            launchProfileService: new DesktopLaunchProfileService(root),
-            targetLauncher: new DesktopTargetLauncher(processLauncher),
-            preflightService: new DesktopCapturePreflightService(windowLocator),
-            windowFocusService: new DesktopWindowFocusService(windowLocator),
-            sessionHistoryService: new DesktopSessionHistoryService(root),
-            diagnosticsBundleService: new DesktopDiagnosticsBundleService(root),
-            performanceMetricsService: new DesktopPerformanceMetricsService(),
-            smokeCheckService: new DesktopSmokeCheckService(root, "ffmpeg", processLauncher, captureFactory),
-            composeManifestService: new DesktopComposeManifestService(),
-            videoComposeService: new DesktopVideoComposeService(new NoOpProcessLauncher()),
-            publishPackageService: new DesktopPublishPackageService(new NoOpProcessLauncher()),
             onboardingService: new DesktopOnboardingService(root),
             demoTemplateService: new DesktopDemoTemplateService(root),
-            sessionRecoveryService: new DesktopSessionRecoveryService(root),
             presenterViewService: new DesktopPresenterViewService(),
-            processRunner: processRunner,
             captureMediaCoordinator: new DesktopCaptureMediaCoordinator(captureRuntime, processLauncher, processRunner),
             narrationCoordinator: new DesktopNarrationCoordinator(captureRuntime,
                 new DesktopClipNarrationService(new NoOpProcessLauncher()),
@@ -69,8 +97,20 @@ internal static class MainWindowViewModelTestBuilder
                 processRunner),
             captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(windowLocator),
             clipCurationCoordinator: new DesktopClipCurationCoordinator(),
-            dependencyHealthService: new DesktopDependencyHealthService(captureRuntime, processLauncher),
-            ffmpegOperationQueue: new DesktopFfmpegOperationQueue());
+            ffmpegOperationQueue: ffmpegOperationQueue,
+            runtimeInitializationUseCase: new DesktopRuntimeInitializationUseCase(),
+            preflightChecksUseCase: preflightChecksUseCase,
+            captureSessionUseCase: captureSessionUseCase,
+            composeOutputUseCase: composeOutputUseCase,
+            draftSessionUseCase: draftSessionUseCase,
+            sessionLifecycleUseCase: sessionLifecycleUseCase,
+            targetingUseCase: targetingUseCase,
+            sessionHistoryUseCase: sessionHistoryUseCase,
+            shellIntegrationUseCase: shellIntegrationUseCase,
+            failureDiagnosticsUseCase: failureDiagnosticsUseCase,
+            healthMonitor: healthMonitorViewModel,
+            publishWorkflow: publishWorkflowViewModel,
+            captureSession: captureSessionViewModel);
     }
 
     private sealed class NoOpProcessLauncher : IProcessLauncher

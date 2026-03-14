@@ -1,5 +1,6 @@
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Services;
+using DemoStudio.Desktop.App.ViewModels;
 using DemoStudio.Infrastructure.Process;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -50,6 +51,10 @@ public sealed class CompositionRootAndConfigurationTests
         var processLauncher = provider.GetRequiredService<IProcessLauncher>();
         var runtime = provider.GetRequiredService<DesktopCaptureRuntime>();
         var smokeCheck = provider.GetRequiredService<DesktopSmokeCheckService>();
+        var mainWindowViewModel = provider.GetRequiredService<MainWindowViewModel>();
+        var targetingUseCase = provider.GetRequiredService<IDesktopTargetingUseCase>();
+        var sessionHistoryUseCase = provider.GetRequiredService<IDesktopSessionHistoryUseCase>();
+        var publishWorkflowUseCase = provider.GetRequiredService<IDesktopPublishWorkflowUseCase>();
 
         Assert.Equal("recorder-root", Path.GetFileName(options.StorageRoot));
         Assert.Equal("ffmpeg-custom.exe", options.Capture.FfmpegPath);
@@ -60,6 +65,10 @@ public sealed class CompositionRootAndConfigurationTests
         Assert.IsType<ProcessLauncher>(processLauncher);
         Assert.NotNull(runtime);
         Assert.NotNull(smokeCheck);
+        Assert.NotNull(mainWindowViewModel);
+        Assert.NotNull(targetingUseCase);
+        Assert.NotNull(sessionHistoryUseCase);
+        Assert.NotNull(publishWorkflowUseCase);
     }
 
     [Fact]

@@ -247,6 +247,20 @@ internal static class DesktopCompositionRoot
             return new DesktopSessionRecoveryService(paths.StorageRoot);
         });
         services.AddSingleton<DesktopStartupHealthService>();
+        services.AddSingleton<IDesktopRuntimeInitializationUseCase, DesktopRuntimeInitializationUseCase>();
+        services.AddSingleton<IDesktopPreflightChecksUseCase, DesktopPreflightChecksUseCase>();
+        services.AddSingleton<IDesktopCaptureSessionUseCase, DesktopCaptureSessionUseCase>();
+        services.AddSingleton<IDesktopComposeOutputUseCase, DesktopComposeOutputUseCase>();
+        services.AddSingleton<IDesktopDraftSessionUseCase, DesktopDraftSessionUseCase>();
+        services.AddSingleton<IDesktopSessionLifecycleUseCase, DesktopSessionLifecycleUseCase>();
+        services.AddSingleton<IDesktopTargetingUseCase, DesktopTargetingUseCase>();
+        services.AddSingleton<IDesktopSessionHistoryUseCase, DesktopSessionHistoryUseCase>();
+        services.AddSingleton<IDesktopShellIntegrationUseCase, DesktopShellIntegrationUseCase>();
+        services.AddSingleton<IDesktopFailureDiagnosticsUseCase, DesktopFailureDiagnosticsUseCase>();
+        services.AddSingleton<IDesktopPublishWorkflowUseCase, DesktopPublishWorkflowUseCase>();
+        services.AddSingleton<HealthMonitorViewModel>();
+        services.AddSingleton<PublishWorkflowViewModel>();
+        services.AddSingleton<CaptureSessionViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<MainWindow>();
     }

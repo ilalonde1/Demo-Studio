@@ -46,7 +46,7 @@ public sealed partial class MainWindowViewModel
         var priorHandle = SelectedWindowCandidate?.HandleHex;
         var lockedHandle = string.IsNullOrWhiteSpace(WindowHandleHex) ? null : WindowHandleHex;
 
-        var windows = _windowCatalogService.ListCapturableWindows();
+        var windows = _targetingUseCase.ListCapturableWindows();
         WindowCandidates.Clear();
         foreach (var window in windows)
         {
@@ -123,7 +123,7 @@ public sealed partial class MainWindowViewModel
             }
 
             EnsureWindowTargetLockedFromSelection();
-            var result = await _windowFocusService.TryActivateAsync(BuildTargetSettings());
+            var result = await _targetingUseCase.FocusTargetAsync(BuildTargetSettings());
             _lastRuntimeMessage = result.Message;
             OnPropertyChanged(nameof(LastRuntimeMessage));
         }

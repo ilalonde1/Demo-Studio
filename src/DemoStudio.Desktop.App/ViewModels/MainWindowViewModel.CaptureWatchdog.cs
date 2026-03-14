@@ -103,7 +103,7 @@ public sealed partial class MainWindowViewModel
     {
         var cleanReason = string.IsNullOrWhiteSpace(reason) ? "Unknown failure." : reason.Trim();
         _lastFailureCode = failureCode;
-        _lastDiagnosticsPath = _diagnosticsBundleService.TryWriteFailureBundle(
+        _lastDiagnosticsPath = _failureDiagnosticsUseCase.TryWriteFailureBundle(
             _snapshot.SessionId,
             _captureRuntime.LastRawVideoPath,
             failureCode,

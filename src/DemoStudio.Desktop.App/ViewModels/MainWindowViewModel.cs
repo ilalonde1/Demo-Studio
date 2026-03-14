@@ -15,28 +15,20 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 {
     private readonly RecorderSessionEngine _sessionEngine;
     private readonly DesktopCaptureRuntime _captureRuntime;
-    private readonly DesktopWindowCatalogService _windowCatalogService;
-    private readonly DesktopLaunchProfileService _launchProfileService;
-    private readonly DesktopTargetLauncher _targetLauncher;
-    private readonly DesktopCapturePreflightService _preflightService;
-    private readonly DesktopWindowFocusService _windowFocusService;
-    private readonly DesktopSessionHistoryService _sessionHistoryService;
-    private readonly DesktopDiagnosticsBundleService _diagnosticsBundleService;
-    private readonly DesktopSmokeCheckService _smokeCheckService;
-    private readonly DesktopComposeManifestService _composeManifestService;
-    private readonly DesktopVideoComposeService _videoComposeService;
     private readonly DesktopNarrationCoordinator _narrationCoordinator;
     private readonly OnboardingViewModel _onboarding;
     private readonly DesktopDemoTemplateService _demoTemplateService;
-    private readonly DesktopSessionRecoveryService _sessionRecoveryService;
     private readonly DesktopPresenterViewService _presenterViewService;
-    private readonly DesktopProcessRunner _processRunner;
-    private readonly DesktopRuntimeInitializationUseCase _runtimeInitializationUseCase;
-    private readonly DesktopPreflightChecksUseCase _preflightChecksUseCase;
-    private readonly DesktopCaptureSessionUseCase _captureSessionUseCase;
-    private readonly DesktopComposeOutputUseCase _composeOutputUseCase;
-    private readonly DesktopDraftSessionUseCase _draftSessionUseCase;
-    private readonly DesktopSessionLifecycleUseCase _sessionLifecycleUseCase;
+    private readonly IDesktopRuntimeInitializationUseCase _runtimeInitializationUseCase;
+    private readonly IDesktopPreflightChecksUseCase _preflightChecksUseCase;
+    private readonly IDesktopCaptureSessionUseCase _captureSessionUseCase;
+    private readonly IDesktopComposeOutputUseCase _composeOutputUseCase;
+    private readonly IDesktopDraftSessionUseCase _draftSessionUseCase;
+    private readonly IDesktopSessionLifecycleUseCase _sessionLifecycleUseCase;
+    private readonly IDesktopTargetingUseCase _targetingUseCase;
+    private readonly IDesktopSessionHistoryUseCase _sessionHistoryUseCase;
+    private readonly IDesktopShellIntegrationUseCase _shellIntegrationUseCase;
+    private readonly IDesktopFailureDiagnosticsUseCase _failureDiagnosticsUseCase;
     private readonly HealthMonitorViewModel _healthMonitor;
     private readonly PublishWorkflowViewModel _publishWorkflow;
     private readonly CaptureSessionViewModel _captureSession;
@@ -98,57 +90,46 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     public MainWindowViewModel(
         RecorderSessionEngine sessionEngine,
         DesktopCaptureRuntime captureRuntime,
-        DesktopWindowCatalogService windowCatalogService,
-        DesktopLaunchProfileService launchProfileService,
-        DesktopTargetLauncher targetLauncher,
-        DesktopCapturePreflightService preflightService,
-        DesktopWindowFocusService windowFocusService,
-        DesktopSessionHistoryService sessionHistoryService,
-        DesktopDiagnosticsBundleService diagnosticsBundleService,
-        DesktopPerformanceMetricsService performanceMetricsService,
-        DesktopSmokeCheckService smokeCheckService,
-        DesktopComposeManifestService composeManifestService,
-        DesktopVideoComposeService videoComposeService,
-        DesktopPublishPackageService publishPackageService,
         DesktopOnboardingService onboardingService,
         DesktopDemoTemplateService demoTemplateService,
-        DesktopSessionRecoveryService sessionRecoveryService,
         DesktopPresenterViewService presenterViewService,
-        DesktopProcessRunner processRunner,
         DesktopCaptureMediaCoordinator captureMediaCoordinator,
         DesktopNarrationCoordinator narrationCoordinator,
         DesktopCaptureWatchdogCoordinator captureWatchdogCoordinator,
         DesktopClipCurationCoordinator clipCurationCoordinator,
-        DesktopDependencyHealthService dependencyHealthService,
-        DesktopFfmpegOperationQueue ffmpegOperationQueue)
+        DesktopFfmpegOperationQueue ffmpegOperationQueue,
+        IDesktopRuntimeInitializationUseCase runtimeInitializationUseCase,
+        IDesktopPreflightChecksUseCase preflightChecksUseCase,
+        IDesktopCaptureSessionUseCase captureSessionUseCase,
+        IDesktopComposeOutputUseCase composeOutputUseCase,
+        IDesktopDraftSessionUseCase draftSessionUseCase,
+        IDesktopSessionLifecycleUseCase sessionLifecycleUseCase,
+        IDesktopTargetingUseCase targetingUseCase,
+        IDesktopSessionHistoryUseCase sessionHistoryUseCase,
+        IDesktopShellIntegrationUseCase shellIntegrationUseCase,
+        IDesktopFailureDiagnosticsUseCase failureDiagnosticsUseCase,
+        HealthMonitorViewModel healthMonitor,
+        PublishWorkflowViewModel publishWorkflow,
+        CaptureSessionViewModel captureSession)
     {
         _sessionEngine = sessionEngine ?? throw new ArgumentNullException(nameof(sessionEngine));
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
-        _windowCatalogService = windowCatalogService ?? throw new ArgumentNullException(nameof(windowCatalogService));
-        _launchProfileService = launchProfileService ?? throw new ArgumentNullException(nameof(launchProfileService));
-        _targetLauncher = targetLauncher ?? throw new ArgumentNullException(nameof(targetLauncher));
-        _preflightService = preflightService ?? throw new ArgumentNullException(nameof(preflightService));
-        _windowFocusService = windowFocusService ?? throw new ArgumentNullException(nameof(windowFocusService));
-        _sessionHistoryService = sessionHistoryService ?? throw new ArgumentNullException(nameof(sessionHistoryService));
-        _diagnosticsBundleService = diagnosticsBundleService ?? throw new ArgumentNullException(nameof(diagnosticsBundleService));
-        var performanceMetricsServiceRequired = performanceMetricsService ?? throw new ArgumentNullException(nameof(performanceMetricsService));
-        _smokeCheckService = smokeCheckService ?? throw new ArgumentNullException(nameof(smokeCheckService));
-        _composeManifestService = composeManifestService ?? throw new ArgumentNullException(nameof(composeManifestService));
-        _videoComposeService = videoComposeService ?? throw new ArgumentNullException(nameof(videoComposeService));
-        var publishPackageServiceRequired = publishPackageService ?? throw new ArgumentNullException(nameof(publishPackageService));
         var onboardingServiceRequired = onboardingService ?? throw new ArgumentNullException(nameof(onboardingService));
         _onboarding = new OnboardingViewModel(onboardingServiceRequired);
         _onboarding.PropertyChanged += OnOnboardingPropertyChanged;
         _demoTemplateService = demoTemplateService ?? throw new ArgumentNullException(nameof(demoTemplateService));
-        _sessionRecoveryService = sessionRecoveryService ?? throw new ArgumentNullException(nameof(sessionRecoveryService));
         _presenterViewService = presenterViewService ?? throw new ArgumentNullException(nameof(presenterViewService));
-        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
-        var dependencyHealthServiceRequired = dependencyHealthService ?? throw new ArgumentNullException(nameof(dependencyHealthService));
-        _healthMonitor = new HealthMonitorViewModel(
-            dependencyHealthServiceRequired,
-            performanceMetricsServiceRequired,
-            _smokeCheckService,
-            _captureRuntime);
+        _runtimeInitializationUseCase = runtimeInitializationUseCase ?? throw new ArgumentNullException(nameof(runtimeInitializationUseCase));
+        _preflightChecksUseCase = preflightChecksUseCase ?? throw new ArgumentNullException(nameof(preflightChecksUseCase));
+        _captureSessionUseCase = captureSessionUseCase ?? throw new ArgumentNullException(nameof(captureSessionUseCase));
+        _composeOutputUseCase = composeOutputUseCase ?? throw new ArgumentNullException(nameof(composeOutputUseCase));
+        _draftSessionUseCase = draftSessionUseCase ?? throw new ArgumentNullException(nameof(draftSessionUseCase));
+        _sessionLifecycleUseCase = sessionLifecycleUseCase ?? throw new ArgumentNullException(nameof(sessionLifecycleUseCase));
+        _targetingUseCase = targetingUseCase ?? throw new ArgumentNullException(nameof(targetingUseCase));
+        _sessionHistoryUseCase = sessionHistoryUseCase ?? throw new ArgumentNullException(nameof(sessionHistoryUseCase));
+        _shellIntegrationUseCase = shellIntegrationUseCase ?? throw new ArgumentNullException(nameof(shellIntegrationUseCase));
+        _failureDiagnosticsUseCase = failureDiagnosticsUseCase ?? throw new ArgumentNullException(nameof(failureDiagnosticsUseCase));
+        _healthMonitor = healthMonitor ?? throw new ArgumentNullException(nameof(healthMonitor));
         _healthMonitor.PropertyChanged += OnHealthMonitorPropertyChanged;
         _targeting = new TargetingLaunchViewModel();
         _targeting.PropertyChanged += OnTargetingPropertyChanged;
@@ -167,28 +148,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _captureWatchdogCoordinator = captureWatchdogCoordinator ?? throw new ArgumentNullException(nameof(captureWatchdogCoordinator));
         _clipCurationCoordinator = clipCurationCoordinator ?? throw new ArgumentNullException(nameof(clipCurationCoordinator));
         _ffmpegOperationQueue = ffmpegOperationQueue ?? throw new ArgumentNullException(nameof(ffmpegOperationQueue));
-        _captureSession = new CaptureSessionViewModel(
-            _sessionEngine,
-            _captureRuntime,
-            _windowFocusService,
-            _presenterViewService,
-            _clipCurationCoordinator);
-        _publishWorkflow = new PublishWorkflowViewModel(
-            publishPackageServiceRequired,
-            _processRunner,
-            _ffmpegOperationQueue,
-            _captureRuntime);
+        _captureSession = captureSession ?? throw new ArgumentNullException(nameof(captureSession));
+        _publishWorkflow = publishWorkflow ?? throw new ArgumentNullException(nameof(publishWorkflow));
         _publishWorkflow.AttachProductionWorkspace(_production);
-        _preflightChecksUseCase = new DesktopPreflightChecksUseCase();
-        _runtimeInitializationUseCase = new DesktopRuntimeInitializationUseCase();
-        _captureSessionUseCase = new DesktopCaptureSessionUseCase(_preflightChecksUseCase);
-        _composeOutputUseCase = new DesktopComposeOutputUseCase(
-            _composeManifestService,
-            _videoComposeService,
-            _ffmpegOperationQueue,
-            _captureRuntime);
-        _draftSessionUseCase = new DesktopDraftSessionUseCase(_sessionRecoveryService);
-        _sessionLifecycleUseCase = new DesktopSessionLifecycleUseCase();
         _snapshot = _sessionEngine.Snapshot();
         _liveClipTimer = new DispatcherTimer
         {

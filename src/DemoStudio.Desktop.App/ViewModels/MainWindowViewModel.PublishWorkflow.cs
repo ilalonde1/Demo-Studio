@@ -1,3 +1,5 @@
+using DemoStudio.Desktop.App.Services;
+
 namespace DemoStudio.Desktop.App.ViewModels;
 
 public sealed partial class MainWindowViewModel
@@ -10,7 +12,7 @@ public sealed partial class MainWindowViewModel
         }
 
         await _publishWorkflow.CreatePublishPackageAsync(
-            new PublishWorkflowContext(
+            new DesktopPublishWorkflowRequest(
                 _lastFinalizedSessionId,
                 _lastOutputPath,
                 SelectedComposeQualityPreset,
