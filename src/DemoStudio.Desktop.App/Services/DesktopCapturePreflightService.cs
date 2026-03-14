@@ -5,6 +5,13 @@ namespace DemoStudio.Desktop.App.Services;
 
 public sealed class DesktopCapturePreflightService
 {
+    private readonly IWindowLocator _windowLocator;
+
+    public DesktopCapturePreflightService(IWindowLocator windowLocator)
+    {
+        _windowLocator = windowLocator ?? throw new ArgumentNullException(nameof(windowLocator));
+    }
+
     public async Task<DesktopPreflightReport> RunAsync(
         DesktopCaptureRuntime runtime,
         CaptureTargetSettings targetSettings,
@@ -68,7 +75,7 @@ public sealed class DesktopCapturePreflightService
         }
     }
 
-    private static async Task ValidateTargetAsync(
+    private async Task ValidateTargetAsync(
         CaptureTargetSettings targetSettings,
         List<string> errors,
         List<string> warnings,
@@ -82,11 +89,10 @@ public sealed class DesktopCapturePreflightService
             return;
         }
 
-        var locator = new DesktopWindowLocator();
         var preferExactHandle = !string.IsNullOrWhiteSpace(targetSettings.WindowHandleHex);
         var titleForLookup = preferExactHandle ? null : targetSettings.WindowTitleContains;
         var processForLookup = targetSettings.WindowProcessName;
-        var locate = await locator.FindAsync(
+        var locate = await _windowLocator.FindAsync(
             new WindowLocatorRequest(
                 titleForLookup,
                 TitleRegex: null,
@@ -97,7 +103,7 @@ public sealed class DesktopCapturePreflightService
 
         if (locate.Found)
         {
-            var stability = await ProbeWindowStabilityAsync(locator, targetSettings, cancellationToken);
+            var stability = await ProbeWindowStabilityAsync(targetSettings, cancellationToken);
             if (!stability.IsStable)
             {
                 errors.Add(stability.Message);
@@ -109,8 +115,7 @@ public sealed class DesktopCapturePreflightService
         errors.Add($"Window target not found. Reason: {locate.FailureReason ?? "Unknown"}");
     }
 
-    private static async Task<(bool IsStable, string Message)> ProbeWindowStabilityAsync(
-        DesktopWindowLocator locator,
+    private async Task<(bool IsStable, string Message)> ProbeWindowStabilityAsync(
         CaptureTargetSettings targetSettings,
         CancellationToken cancellationToken)
     {
@@ -120,7 +125,7 @@ public sealed class DesktopCapturePreflightService
         var processForLookup = targetSettings.WindowProcessName;
         for (var i = 0; i < 3; i++)
         {
-            var result = await locator.FindAsync(
+            var result = await _windowLocator.FindAsync(
                     new WindowLocatorRequest(
                         titleForLookup,
                         TitleRegex: null,

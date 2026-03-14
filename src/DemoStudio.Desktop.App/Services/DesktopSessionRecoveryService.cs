@@ -14,6 +14,8 @@ public sealed class DesktopSessionRecoveryService
 
     private readonly string _draftPath;
 
+    public string? LastLoadDiagnostic { get; private set; }
+
     public DesktopSessionRecoveryService(string storageRoot)
     {
         Directory.CreateDirectory(storageRoot);
@@ -22,42 +24,29 @@ public sealed class DesktopSessionRecoveryService
 
     public async Task SaveAsync(DesktopSessionDraft draft, CancellationToken cancellationToken = default)
     {
-        var raw = JsonSerializer.Serialize(draft, JsonOptions);
-        await File.WriteAllTextAsync(_draftPath, raw, cancellationToken);
+        await DesktopAtomicJsonFile.SaveAsync(_draftPath, draft, JsonOptions, cancellationToken);
     }
 
     public async Task<DesktopSessionDraft?> TryLoadAsync(CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(_draftPath))
+        var load = await DesktopAtomicJsonFile.LoadAsync<DesktopSessionDraft>(_draftPath, JsonOptions, cancellationToken).ConfigureAwait(false);
+        LastLoadDiagnostic = load.Diagnostic;
+        if (!load.Exists)
         {
             return null;
         }
 
-        try
+        if (load.Value is not null)
         {
-            var raw = await File.ReadAllTextAsync(_draftPath, cancellationToken);
-            return JsonSerializer.Deserialize<DesktopSessionDraft>(raw, JsonOptions);
+            return load.Value;
         }
-        catch
-        {
-            return null;
-        }
+
+        throw new InvalidOperationException(LastLoadDiagnostic ?? "Session draft could not be loaded.");
     }
 
     public Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        try
-        {
-            if (File.Exists(_draftPath))
-            {
-                File.Delete(_draftPath);
-            }
-        }
-        catch
-        {
-        }
-
-        return Task.CompletedTask;
+        return DesktopAtomicJsonFile.DeleteAsync(_draftPath, cancellationToken);
     }
 }
 

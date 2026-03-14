@@ -21,6 +21,10 @@ public sealed partial class MainWindowViewModel
         SessionHistoryStatus = history.Count == 0
             ? "No recorded sessions yet."
             : $"Loaded {history.Count} session records.";
+        if (!string.IsNullOrWhiteSpace(_sessionHistoryService.LastLoadDiagnostic))
+        {
+            SessionHistoryStatus += $" Warning: {_sessionHistoryService.LastLoadDiagnostic}";
+        }
         OnPropertyChanged(nameof(SessionHistoryStatus));
         OnPropertyChanged(nameof(SessionHistory));
         RaiseCommandState();

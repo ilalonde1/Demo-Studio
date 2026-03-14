@@ -1,5 +1,7 @@
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Application.Abstractions.System;
+using DemoStudio.Infrastructure.Execution;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests;
 
@@ -13,7 +15,11 @@ public sealed class CaptureRuntimeResilienceTests
             StorageRoot = "bad\0path"
         };
 
-        var runtime = new DesktopCaptureRuntime(options, new NoOpProcessLauncher());
+        var processLauncher = new NoOpProcessLauncher();
+        var captureFactory = new DesktopVideoCaptureServiceFactory(
+            processLauncher,
+            NullLogger<FfmpegVideoCaptureService>.Instance);
+        var runtime = new DesktopCaptureRuntime(options, processLauncher, captureFactory, new DesktopWindowLocator());
 
         Assert.False(string.IsNullOrWhiteSpace(runtime.StorageRoot));
         Assert.True(Directory.Exists(runtime.StorageRoot));

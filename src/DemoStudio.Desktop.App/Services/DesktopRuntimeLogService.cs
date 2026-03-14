@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -40,6 +41,9 @@ public sealed class DesktopRuntimeLogService
 
     public void Error(string message, Exception? exception = null, string eventName = "Runtime")
         => Write("ERROR", eventName, message, exception);
+
+    public void Log(LogLevel level, string category, string message, Exception? exception = null)
+        => Write(MapLevel(level), category, message, exception);
 
     public void PruneNow()
     {
@@ -124,6 +128,20 @@ public sealed class DesktopRuntimeLogService
         return string.Create(
             CultureInfo.InvariantCulture,
             $"{nowUtc:O}\t{level}\t{eventName}\t{safeMessage}\t{exceptionType}\t{exceptionMessage}\t{exceptionStack}");
+    }
+
+    private static string MapLevel(LogLevel level)
+    {
+        return level switch
+        {
+            LogLevel.Trace => "TRACE",
+            LogLevel.Debug => "DEBUG",
+            LogLevel.Information => "INFO",
+            LogLevel.Warning => "WARN",
+            LogLevel.Error => "ERROR",
+            LogLevel.Critical => "CRITICAL",
+            _ => "INFO"
+        };
     }
 
     private void PruneLogs(DateTimeOffset nowUtc)

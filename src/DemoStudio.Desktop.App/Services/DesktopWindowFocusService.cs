@@ -1,10 +1,16 @@
 using System.Runtime.InteropServices;
+using DemoStudio.Infrastructure.Execution.Windows;
 
 namespace DemoStudio.Desktop.App.Services;
 
 public sealed class DesktopWindowFocusService
 {
-    private readonly DesktopWindowLocator _windowLocator = new();
+    private readonly IWindowLocator _windowLocator;
+
+    public DesktopWindowFocusService(IWindowLocator windowLocator)
+    {
+        _windowLocator = windowLocator ?? throw new ArgumentNullException(nameof(windowLocator));
+    }
 
     public async Task<(bool Succeeded, string Message)> TryActivateAsync(
         CaptureTargetSettings settings,

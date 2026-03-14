@@ -11,6 +11,7 @@ public partial class App : System.Windows.Application
     private RecorderHudWindow? _hudWindow;
     private DesktopCrashReporter? _crashReporter;
     private DesktopRuntimeLogService? _runtimeLog;
+    private Task? _shutdownTask;
 
     internal DesktopRuntimeLogService? RuntimeLog => _runtimeLog;
 
@@ -57,23 +58,7 @@ public partial class App : System.Windows.Application
 
             MainWindow = _mainWindow;
             _mainWindow.Loaded += (_, _) => EnsureHudWindow(viewModel);
-            _mainWindow.Closed += async (_, _) =>
-            {
-                if (_hudWindow is not null)
-                {
-                    _hudWindow.Close();
-                    _hudWindow = null;
-                }
-
-                if (viewModel is IAsyncDisposable asyncDisposable)
-                {
-                    await asyncDisposable.DisposeAsync();
-                }
-                else if (viewModel is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            };
+            _mainWindow.Closing += (_, _) => viewModel.BeginShutdown();
 
             _mainWindow.Show();
             _runtimeLog.Info("Main window shown.", "AppStartup");
@@ -137,10 +122,39 @@ public partial class App : System.Windows.Application
         _runtimeLog?.Info("Recorder control panel shown.", "AppStartup");
     }
 
-    protected override void OnExit(ExitEventArgs e)
+    protected override async void OnExit(ExitEventArgs e)
     {
         _runtimeLog?.Info($"Desktop app exiting with code {e.ApplicationExitCode}.", "AppShutdown");
-        _serviceProvider?.Dispose();
-        base.OnExit(e);
+
+        try
+        {
+            _shutdownTask ??= ShutdownRuntimeAsync();
+            await _shutdownTask;
+        }
+        finally
+        {
+            _serviceProvider?.Dispose();
+            base.OnExit(e);
+        }
+    }
+
+    private async Task ShutdownRuntimeAsync()
+    {
+        if (_hudWindow is not null)
+        {
+            _hudWindow.Close();
+            _hudWindow = null;
+        }
+
+        if (_mainWindow?.DataContext is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync();
+            return;
+        }
+
+        if (_mainWindow?.DataContext is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
     }
 }

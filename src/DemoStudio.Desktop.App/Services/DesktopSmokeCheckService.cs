@@ -5,25 +5,24 @@ using DemoStudio.Infrastructure.Execution;
 using DemoStudio.Infrastructure.Execution.Windows;
 using DemoStudio.Infrastructure.Options;
 using DemoStudio.Infrastructure.Process;
-using DemoStudio.Infrastructure.Storage;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using System.IO;
 
 namespace DemoStudio.Desktop.App.Services;
 
 public sealed class DesktopSmokeCheckService
 {
-    private readonly IProcessLauncher _processLauncher;
+    private readonly DesktopVideoCaptureServiceFactory _captureServiceFactory;
     private readonly string _storageRoot;
     private readonly string _ffmpegPath;
 
     public DesktopSmokeCheckService(
         string storageRoot,
         string ffmpegPath,
-        IProcessLauncher processLauncher)
+        IProcessLauncher processLauncher,
+        DesktopVideoCaptureServiceFactory captureServiceFactory)
     {
-        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
+        ArgumentNullException.ThrowIfNull(processLauncher);
+        _captureServiceFactory = captureServiceFactory ?? throw new ArgumentNullException(nameof(captureServiceFactory));
         _storageRoot = storageRoot;
         _ffmpegPath = ffmpegPath;
     }
@@ -61,12 +60,7 @@ public sealed class DesktopSmokeCheckService
             OutputFileExtension = ".mp4"
         };
 
-        var captureService = new FfmpegVideoCaptureService(
-            _processLauncher,
-            new LocalFileStorage(smokeRoot),
-            new NullWindowLocator(),
-            Options.Create(captureOptions),
-            NullLogger<FfmpegVideoCaptureService>.Instance);
+        var captureService = _captureServiceFactory.Create(captureOptions, smokeRoot, new NullWindowLocator());
 
         var run = new DemoRun(Guid.NewGuid(), Guid.NewGuid(), "desktop.smoke@demostudio.local");
         var start = await captureService.StartAsync(new CaptureStartRequest(run, outputDirectory, rawVideoPath), cancellationToken);

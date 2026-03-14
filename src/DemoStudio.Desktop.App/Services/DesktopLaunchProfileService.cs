@@ -14,6 +14,8 @@ public sealed class DesktopLaunchProfileService
     private readonly string _profilesPath;
     private readonly SemaphoreSlim _sync = new(1, 1);
 
+    public string? LastLoadDiagnostic { get; private set; }
+
     public DesktopLaunchProfileService(string storageRoot)
     {
         if (string.IsNullOrWhiteSpace(storageRoot))
@@ -91,26 +93,24 @@ public sealed class DesktopLaunchProfileService
 
     private async Task<List<DesktopLaunchProfile>> LoadUnsafeAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_profilesPath))
+        var load = await DesktopAtomicJsonFile.LoadAsync<List<DesktopLaunchProfile>>(_profilesPath, JsonOptions, cancellationToken).ConfigureAwait(false);
+        LastLoadDiagnostic = load.Diagnostic;
+        if (!load.Exists)
         {
             return new List<DesktopLaunchProfile>();
         }
 
-        try
+        if (load.Value is not null)
         {
-            var raw = await File.ReadAllTextAsync(_profilesPath, cancellationToken).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<List<DesktopLaunchProfile>>(raw, JsonOptions) ?? new List<DesktopLaunchProfile>();
+            return load.Value;
         }
-        catch
-        {
-            return new List<DesktopLaunchProfile>();
-        }
+
+        throw new InvalidOperationException(LastLoadDiagnostic ?? "Launch profiles could not be loaded.");
     }
 
     private async Task PersistUnsafeAsync(List<DesktopLaunchProfile> profiles, CancellationToken cancellationToken)
     {
-        var json = JsonSerializer.Serialize(profiles, JsonOptions);
-        await File.WriteAllTextAsync(_profilesPath, json, cancellationToken).ConfigureAwait(false);
+        await DesktopAtomicJsonFile.SaveAsync(_profilesPath, profiles, JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 }
 

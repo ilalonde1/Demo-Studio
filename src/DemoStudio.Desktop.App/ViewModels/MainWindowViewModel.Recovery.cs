@@ -65,6 +65,11 @@ public sealed partial class MainWindowViewModel
         var draft = await _sessionRecoveryService.TryLoadAsync();
         if (draft is null)
         {
+            if (!string.IsNullOrWhiteSpace(_sessionRecoveryService.LastLoadDiagnostic))
+            {
+                _lastRuntimeMessage = _sessionRecoveryService.LastLoadDiagnostic;
+                OnPropertyChanged(nameof(LastRuntimeMessage));
+            }
             return;
         }
 
@@ -110,7 +115,9 @@ public sealed partial class MainWindowViewModel
         if (CurrentSessionClips.Count > 0)
         {
             IsClipCurationExpanded = true;
-            _lastRuntimeMessage = "Recovered previous draft session.";
+            _lastRuntimeMessage = string.IsNullOrWhiteSpace(_sessionRecoveryService.LastLoadDiagnostic)
+                ? "Recovered previous draft session."
+                : $"Recovered previous draft session. {_sessionRecoveryService.LastLoadDiagnostic}";
             OnPropertyChanged(nameof(LastRuntimeMessage));
             _ = GenerateMissingClipThumbnailsAsync(draft.LastOutputPath, draft.SessionId);
         }

@@ -5,10 +5,8 @@ using DemoStudio.Infrastructure.Execution;
 using DemoStudio.Infrastructure.Execution.Windows;
 using DemoStudio.Infrastructure.Options;
 using DemoStudio.Infrastructure.Process;
-using DemoStudio.Infrastructure.Storage;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using System.IO;
+using Microsoft.Extensions.Options;
 
 namespace DemoStudio.Desktop.App.Services;
 
@@ -18,7 +16,8 @@ public sealed class DesktopCaptureRuntime
     private static readonly TimeSpan StartupProbeTimeout = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan StartupProbeInterval = TimeSpan.FromMilliseconds(250);
     private readonly object _sync = new();
-    private readonly IProcessLauncher _processLauncher;
+    private readonly DesktopVideoCaptureServiceFactory _captureServiceFactory;
+    private readonly IWindowLocator _windowLocator;
     private readonly FfmpegCaptureOptions _baseCaptureOptions;
     private readonly string _storageRoot;
     private readonly string _ffmpegPath;
@@ -29,16 +28,31 @@ public sealed class DesktopCaptureRuntime
     private IVideoCaptureService? _activeCaptureService;
     private bool _started;
 
-    public DesktopCaptureRuntime(DesktopRecorderOptions options, IProcessLauncher processLauncher)
+    public DesktopCaptureRuntime(
+        IOptions<DesktopRecorderOptions> options,
+        IProcessLauncher processLauncher,
+        DesktopVideoCaptureServiceFactory captureServiceFactory,
+        IWindowLocator windowLocator)
+        : this(options.Value, processLauncher, captureServiceFactory, windowLocator)
+    {
+    }
+
+    public DesktopCaptureRuntime(
+        DesktopRecorderOptions options,
+        IProcessLauncher processLauncher,
+        DesktopVideoCaptureServiceFactory captureServiceFactory,
+        IWindowLocator windowLocator)
     {
         if (options is null)
         {
             throw new ArgumentNullException(nameof(options));
         }
 
-        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
+        ArgumentNullException.ThrowIfNull(processLauncher);
+        _captureServiceFactory = captureServiceFactory ?? throw new ArgumentNullException(nameof(captureServiceFactory));
+        _windowLocator = windowLocator ?? throw new ArgumentNullException(nameof(windowLocator));
 
-        _storageRoot = ResolveStorageRoot(options.StorageRoot);
+        _storageRoot = DesktopRecorderOptionsNormalizer.ResolveStorageRoot(options.StorageRoot);
 
         _baseCaptureOptions = options.Capture ?? new FfmpegCaptureOptions();
         _baseCaptureOptions.Enabled = true;
@@ -393,36 +407,7 @@ public sealed class DesktopCaptureRuntime
             MicrophoneDeviceName = string.IsNullOrWhiteSpace(_baseCaptureOptions.MicrophoneDeviceName) ? null : _baseCaptureOptions.MicrophoneDeviceName.Trim()
         };
 
-        var processLauncher = _processLauncher;
-        var fileStorage = new LocalFileStorage(_storageRoot);
-        IWindowLocator windowLocator = new DesktopWindowLocator();
-
-        return new FfmpegVideoCaptureService(
-            processLauncher,
-            fileStorage,
-            windowLocator,
-            Options.Create(effectiveOptions),
-            NullLogger<FfmpegVideoCaptureService>.Instance);
-    }
-
-    private static string ResolveStorageRoot(string? configuredStorageRoot)
-    {
-        var candidate = string.IsNullOrWhiteSpace(configuredStorageRoot)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DemoStudio", "RecorderDesktop")
-            : configuredStorageRoot.Trim();
-
-        try
-        {
-            var resolved = Path.GetFullPath(candidate);
-            Directory.CreateDirectory(resolved);
-            return resolved;
-        }
-        catch
-        {
-            var fallback = Path.Combine(Path.GetTempPath(), "DemoStudio", "RecorderDesktop");
-            Directory.CreateDirectory(fallback);
-            return fallback;
-        }
+        return _captureServiceFactory.Create(effectiveOptions, _storageRoot, _windowLocator);
     }
 }
 

@@ -18,6 +18,10 @@ public sealed partial class MainWindowViewModel
         LaunchStatus = LaunchProfiles.Count == 0
             ? "No saved launch profiles."
             : $"Loaded {LaunchProfiles.Count} launch profiles.";
+        if (!string.IsNullOrWhiteSpace(_launchProfileService.LastLoadDiagnostic))
+        {
+            LaunchStatus += $" Warning: {_launchProfileService.LastLoadDiagnostic}";
+        }
         OnPropertyChanged(nameof(LaunchProfiles));
         OnPropertyChanged(nameof(LaunchStatus));
         RaiseCommandState();

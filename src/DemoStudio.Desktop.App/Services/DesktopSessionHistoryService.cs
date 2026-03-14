@@ -14,6 +14,8 @@ public sealed class DesktopSessionHistoryService
     private readonly string _storePath;
     private readonly SemaphoreSlim _sync = new(1, 1);
 
+    public string? LastLoadDiagnostic { get; private set; }
+
     public DesktopSessionHistoryService(string storageRoot)
     {
         if (string.IsNullOrWhiteSpace(storageRoot))
@@ -118,26 +120,24 @@ public sealed class DesktopSessionHistoryService
 
     private async Task<List<DesktopSessionRecord>> LoadUnsafeAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_storePath))
+        var load = await DesktopAtomicJsonFile.LoadAsync<List<DesktopSessionRecord>>(_storePath, JsonOptions, cancellationToken).ConfigureAwait(false);
+        LastLoadDiagnostic = load.Diagnostic;
+        if (!load.Exists)
         {
             return new List<DesktopSessionRecord>();
         }
 
-        try
+        if (load.Value is not null)
         {
-            var raw = await File.ReadAllTextAsync(_storePath, cancellationToken).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<List<DesktopSessionRecord>>(raw, JsonOptions) ?? new List<DesktopSessionRecord>();
+            return load.Value;
         }
-        catch
-        {
-            return new List<DesktopSessionRecord>();
-        }
+
+        throw new InvalidOperationException(LastLoadDiagnostic ?? "Session history could not be loaded.");
     }
 
     private async Task PersistUnsafeAsync(List<DesktopSessionRecord> list, CancellationToken cancellationToken)
     {
-        var raw = JsonSerializer.Serialize(list, JsonOptions);
-        await File.WriteAllTextAsync(_storePath, raw, cancellationToken).ConfigureAwait(false);
+        await DesktopAtomicJsonFile.SaveAsync(_storePath, list, JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 }
 

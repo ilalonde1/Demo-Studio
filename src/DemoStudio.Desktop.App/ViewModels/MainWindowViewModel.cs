@@ -63,6 +63,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private long _lastBackgroundFailureTicks;
     private bool _isInitialized;
     private bool _isDisposed;
+    private bool _isShutdownInProgress;
 
     private string _lastOutputPath
     {
@@ -1566,7 +1567,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
 
     public void Dispose()
     {
-        _ = DisposeAsync();
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     public async ValueTask DisposeAsync()
@@ -1576,16 +1577,20 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             return;
         }
 
+        BeginShutdown();
         _isDisposed = true;
-        _lifecycleCancellation.Cancel();
-
-        _draftAutosaveTimer.Stop();
-        _telemetryTimer.Stop();
-        _liveClipTimer.Stop();
 
         _draftAutosaveTimer.Tick -= OnDraftAutosaveTimerTick;
         _telemetryTimer.Tick -= OnTelemetryTimerTick;
         _liveClipTimer.Tick -= OnLiveClipTimerTick;
+
+        try
+        {
+            await FlushShutdownStateAsync();
+        }
+        catch
+        {
+        }
 
         try
         {
@@ -1608,6 +1613,48 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _sessionState.PropertyChanged -= OnSessionStatePropertyChanged;
         _initializeGate.Dispose();
         _lifecycleCancellation.Dispose();
+    }
+
+    internal void BeginShutdown()
+    {
+        if (_isShutdownInProgress)
+        {
+            return;
+        }
+
+        _isShutdownInProgress = true;
+        _draftAutosaveTimer.Stop();
+        _telemetryTimer.Stop();
+        _liveClipTimer.Stop();
+        _lifecycleCancellation.Cancel();
+    }
+
+    private async Task FlushShutdownStateAsync()
+    {
+        if (_snapshot.State == RecorderSessionState.Recording)
+        {
+            _snapshot = _captureSession.PauseClip();
+            CaptureCompletedClipMetadata(_snapshot);
+            EndLiveClipTracking();
+        }
+
+        if (_snapshot.State is RecorderSessionState.Recording or RecorderSessionState.Paused)
+        {
+            try
+            {
+                var stopResult = await _captureSession.StopCaptureAsync(CancellationToken.None);
+                if (stopResult.Succeeded && !string.IsNullOrWhiteSpace(stopResult.RawVideoPath))
+                {
+                    _lastOutputPath = stopResult.RawVideoPath;
+                    OnPropertyChanged(nameof(LastOutputPath));
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        await SaveDraftStateAsync();
     }
 }
 

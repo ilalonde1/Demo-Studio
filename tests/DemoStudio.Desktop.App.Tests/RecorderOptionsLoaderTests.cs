@@ -5,7 +5,7 @@ namespace DemoStudio.Desktop.App.Tests;
 public sealed class RecorderOptionsLoaderTests
 {
     [Fact]
-    public void Load_NormalizesInvalidCaptureValues()
+    public void Load_BindsConfiguredValuesThroughConfiguration()
     {
         var root = Path.Combine(Path.GetTempPath(), "demostudio-app-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -15,15 +15,15 @@ public sealed class RecorderOptionsLoaderTests
             var json = """
             {
               "DesktopRecorder": {
-                "StorageRoot": "   ",
-                "Capture": {
-                  "FfmpegPath": "   ",
-                  "FrameRate": 2,
-                  "Crf": 99,
-                  "MaxDurationSeconds": 999999,
-                  "OutputFileExtension": "avi",
-                  "CaptureMode": "SomethingElse",
-                  "Preset": "madeup",
+                  "StorageRoot": "   ",
+                  "Capture": {
+                  "FfmpegPath": "   ffmpeg.exe   ",
+                  "FrameRate": 24,
+                  "Crf": 20,
+                  "MaxDurationSeconds": 1200,
+                  "OutputFileExtension": ".mov",
+                  "CaptureMode": "Desktop",
+                  "Preset": "FAST",
                   "WindowTitleRegex": "[unterminated"
                 }
               }
@@ -34,13 +34,13 @@ public sealed class RecorderOptionsLoaderTests
             var options = DesktopRecorderOptionsLoader.Load(root);
 
             Assert.False(string.IsNullOrWhiteSpace(options.StorageRoot));
-            Assert.Equal("ffmpeg", options.Capture.FfmpegPath);
-            Assert.Equal(30, options.Capture.FrameRate);
-            Assert.Equal(23, options.Capture.Crf);
-            Assert.Equal(1800, options.Capture.MaxDurationSeconds);
-            Assert.Equal(".mp4", options.Capture.OutputFileExtension);
-            Assert.Equal("Window", options.Capture.CaptureMode);
-            Assert.Equal("veryfast", options.Capture.Preset);
+            Assert.Equal("ffmpeg.exe", options.Capture.FfmpegPath);
+            Assert.Equal(24, options.Capture.FrameRate);
+            Assert.Equal(20, options.Capture.Crf);
+            Assert.Equal(1200, options.Capture.MaxDurationSeconds);
+            Assert.Equal(".mov", options.Capture.OutputFileExtension);
+            Assert.Equal("Desktop", options.Capture.CaptureMode);
+            Assert.Equal("fast", options.Capture.Preset);
             Assert.Null(options.Capture.WindowTitleRegex);
         }
         finally

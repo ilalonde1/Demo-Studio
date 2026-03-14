@@ -1,7 +1,9 @@
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.ViewModels;
 using DemoStudio.Application.Abstractions.System;
+using DemoStudio.Infrastructure.Execution;
 using DemoStudio.Infrastructure.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests;
 
@@ -60,7 +62,11 @@ public sealed class ReliabilityWorkflowTests
                     FfmpegPath = "missing-ffmpeg-bin-for-test"
                 }
             };
-            var runtime = new DesktopCaptureRuntime(options, new NoOpProcessLauncher());
+            var processLauncher = new NoOpProcessLauncher();
+            var captureFactory = new DesktopVideoCaptureServiceFactory(
+                processLauncher,
+                NullLogger<FfmpegVideoCaptureService>.Instance);
+            var runtime = new DesktopCaptureRuntime(options, processLauncher, captureFactory, new DesktopWindowLocator());
             var service = new DesktopDependencyHealthService(runtime, new DesktopProcessRunner());
 
             var snapshot = await service.RefreshAsync();

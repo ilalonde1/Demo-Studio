@@ -6,7 +6,9 @@ using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.Core.Sessions;
 using DemoStudio.Desktop.Core.Time;
 using DemoStudio.Application.Abstractions.System;
+using DemoStudio.Infrastructure.Execution;
 using DemoStudio.Infrastructure.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests.Helpers;
 
@@ -30,7 +32,12 @@ internal static class MainWindowViewModelTestBuilder
 
         var sessionEngine = new RecorderSessionEngine(new SystemClock());
         var processRunner = new DesktopProcessRunner();
-        var captureRuntime = new DesktopCaptureRuntime(options, new NoOpProcessLauncher());
+        var processLauncher = new NoOpProcessLauncher();
+        var windowLocator = new DesktopWindowLocator();
+        var captureFactory = new DesktopVideoCaptureServiceFactory(
+            processLauncher,
+            NullLogger<FfmpegVideoCaptureService>.Instance);
+        var captureRuntime = new DesktopCaptureRuntime(options, processLauncher, captureFactory, windowLocator);
 
         // All constructor parameters are required. If the constructor signature
         // changes, this builder will fail to compile  update it before adding
@@ -41,12 +48,12 @@ internal static class MainWindowViewModelTestBuilder
             windowCatalogService: new DesktopWindowCatalogService(),
             launchProfileService: new DesktopLaunchProfileService(root),
             targetLauncher: new DesktopTargetLauncher(processRunner),
-            preflightService: new DesktopCapturePreflightService(),
-            windowFocusService: new DesktopWindowFocusService(),
+            preflightService: new DesktopCapturePreflightService(windowLocator),
+            windowFocusService: new DesktopWindowFocusService(windowLocator),
             sessionHistoryService: new DesktopSessionHistoryService(root),
             diagnosticsBundleService: new DesktopDiagnosticsBundleService(root),
             performanceMetricsService: new DesktopPerformanceMetricsService(),
-            smokeCheckService: new DesktopSmokeCheckService(root, "ffmpeg", new NoOpProcessLauncher()),
+            smokeCheckService: new DesktopSmokeCheckService(root, "ffmpeg", processLauncher, captureFactory),
             composeManifestService: new DesktopComposeManifestService(),
             videoComposeService: new DesktopVideoComposeService(new NoOpProcessLauncher()),
             publishPackageService: new DesktopPublishPackageService(new NoOpProcessLauncher()),
@@ -60,7 +67,7 @@ internal static class MainWindowViewModelTestBuilder
                 new DesktopClipNarrationService(new NoOpProcessLauncher()),
                 new DesktopAiNarrationService(new HttpClient(new NoOpHttpMessageHandler())),
                 processRunner),
-            captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(new DesktopWindowLocator()),
+            captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(windowLocator),
             clipCurationCoordinator: new DesktopClipCurationCoordinator(),
             dependencyHealthService: new DesktopDependencyHealthService(captureRuntime, processRunner),
             ffmpegOperationQueue: new DesktopFfmpegOperationQueue());
