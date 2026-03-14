@@ -31,6 +31,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly IDesktopShellIntegrationUseCase _shellIntegrationUseCase;
     private readonly IDesktopFailureDiagnosticsUseCase _failureDiagnosticsUseCase;
     private readonly ILogger<MainWindowViewModel> _logger;
+    private readonly MainWindowStatusCoordinator _statusCoordinator;
     private readonly HealthMonitorViewModel _healthMonitor;
     private readonly PublishWorkflowViewModel _publishWorkflow;
     private readonly CaptureSessionViewModel _captureSession;
@@ -60,7 +61,6 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private string _lastDraftFingerprint = string.Empty;
     private int _draftAutosaveInFlight;
     private int _clipThumbnailBackfillInFlight;
-    private long _lastBackgroundFailureTicks;
     private bool _isInitialized;
     private bool _isDisposed;
     private bool _isShutdownInProgress;
@@ -133,6 +133,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _shellIntegrationUseCase = shellIntegrationUseCase ?? throw new ArgumentNullException(nameof(shellIntegrationUseCase));
         _failureDiagnosticsUseCase = failureDiagnosticsUseCase ?? throw new ArgumentNullException(nameof(failureDiagnosticsUseCase));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _statusCoordinator = new MainWindowStatusCoordinator(_logger, BuildFixHint);
         _healthMonitor = healthMonitor ?? throw new ArgumentNullException(nameof(healthMonitor));
         _healthMonitor.PropertyChanged += OnHealthMonitorPropertyChanged;
         _targeting = new TargetingLaunchViewModel();
@@ -1327,56 +1328,26 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     }
 
     private string BuildFailureDisplay(string code, string summary, string? detail = null)
-    {
-        var envelope = new DesktopFailureEnvelope(
-            Code: code,
-            Summary: summary,
-            Detail: detail,
-            FixHint: BuildFixHint(code));
-        return envelope.ToDisplayText();
-    }
+        => _statusCoordinator.BuildFailureDisplay(code, summary, detail);
 
     private void SetRuntimeFailure(string code, string summary, Exception? exception = null)
     {
-        if (exception is not null)
-        {
-            _logger.LogError(exception, "Runtime failure {FailureCode}: {Summary}", code, summary);
-        }
-        else
-        {
-            _logger.LogWarning("Runtime failure {FailureCode}: {Summary}", code, summary);
-        }
-
-        _lastRuntimeMessage = BuildFailureDisplay(code, summary, exception?.Message);
+        _lastRuntimeMessage = _statusCoordinator.CreateRuntimeFailureMessage(code, summary, exception);
         OnPropertyChanged(nameof(LastRuntimeMessage));
-    }
-
-    private bool ShouldReportBackgroundFailure(TimeSpan minInterval)
-    {
-        var nowTicks = DateTime.UtcNow.Ticks;
-        var previousTicks = Interlocked.Read(ref _lastBackgroundFailureTicks);
-        if (previousTicks != 0)
-        {
-            var elapsedTicks = nowTicks - previousTicks;
-            if (elapsedTicks > 0 && elapsedTicks < minInterval.Ticks)
-            {
-                return false;
-            }
-        }
-
-        Interlocked.Exchange(ref _lastBackgroundFailureTicks, nowTicks);
-        return true;
     }
 
     private async Task ReportBackgroundFailureAsync(string code, string summary, Exception ex, TimeSpan minInterval)
     {
-        if (!ShouldReportBackgroundFailure(minInterval))
-        {
-            return;
-        }
-
-        _logger.LogError(ex, "Background failure {FailureCode}: {Summary}", code, summary);
-        await RunOnUiThreadAsync(() => SetRuntimeFailure(code, summary, ex));
+        await _statusCoordinator.ReportBackgroundFailureAsync(
+            code,
+            summary,
+            ex,
+            minInterval,
+            message => RunOnUiThreadAsync(() =>
+            {
+                _lastRuntimeMessage = message;
+                OnPropertyChanged(nameof(LastRuntimeMessage));
+            }));
     }
 
     private void RecordOperationMetric(string operationName, TimeSpan elapsed)

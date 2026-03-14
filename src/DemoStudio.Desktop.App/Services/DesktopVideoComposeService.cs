@@ -3,10 +3,8 @@ using System.Globalization;
 using System.IO;
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
-using System.Security.Cryptography;
-using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Infrastructure;
+using DemoStudio.Application.Abstractions.System;
 using Microsoft.Extensions.Logging;
 
 namespace DemoStudio.Desktop.App.Services;
@@ -18,17 +16,19 @@ public sealed class DesktopVideoComposeService
     private static readonly TimeSpan MaxSegmentTimeout = TimeSpan.FromMinutes(4);
     private static readonly TimeSpan MinFinalTimeout = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan MaxFinalTimeout = TimeSpan.FromMinutes(8);
-    private static readonly TimeSpan CacheMaxAge = TimeSpan.FromDays(14);
-    private static readonly TimeSpan CachePruneInterval = TimeSpan.FromMinutes(30);
-    private const long CacheMaxBytes = 2L * 1024 * 1024 * 1024; // 2 GB
-    private const long CacheTrimTargetBytes = (long)(CacheMaxBytes * 0.85); // trim below 85%
     private readonly IProcessLauncher _processLauncher;
     private readonly ILogger<DesktopVideoComposeService> _logger;
+    private readonly DesktopComposeCacheManager _cacheManager;
+    private readonly DesktopComposeStageExecutor _stageExecutor;
+    private readonly DesktopComposeTelemetryService _telemetryService;
 
     public DesktopVideoComposeService(IProcessLauncher processLauncher, ILogger<DesktopVideoComposeService> logger)
     {
         _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _cacheManager = new DesktopComposeCacheManager(_logger);
+        _stageExecutor = new DesktopComposeStageExecutor(_processLauncher, _logger);
+        _telemetryService = new DesktopComposeTelemetryService(_cacheManager, _logger);
     }
 
     public async Task<DesktopVideoComposeResult> ComposeAsync(
@@ -79,7 +79,7 @@ public sealed class DesktopVideoComposeService
         Directory.CreateDirectory(curatedDirectory);
         var cacheDirectory = DesktopStoragePaths.GetComposeCacheDirectory(curatedDirectory);
         Directory.CreateDirectory(cacheDirectory);
-        TryPruneComposeCache(cacheDirectory, DateTimeOffset.UtcNow, composeOperationId);
+        _cacheManager.Prune(cacheDirectory, DateTimeOffset.UtcNow, composeOperationId);
         var telemetryPath = DesktopStoragePaths.GetComposeTelemetryPath(curatedDirectory);
         var telemetryStages = new List<ComposeTelemetryStage>();
         var composeStopwatch = Stopwatch.StartNew();
@@ -91,7 +91,7 @@ public sealed class DesktopVideoComposeService
         var style = ComposeStyleProfile.Normalize(manifest.ExportStyle);
         var includeAudioTrack = clips.Any(x => x.IncludeNarration || HasNarrationFile(x));
         var totalDurationSeconds = clips.Sum(x => Math.Max(0.05d, x.DurationSeconds));
-        var rawSignature = BuildFileSignature(manifest.RawVideoPath);
+        var rawSignature = _cacheManager.BuildFileSignature(manifest.RawVideoPath);
         if (string.IsNullOrWhiteSpace(rawSignature))
         {
             return DesktopVideoComposeResult.Failure("Compose failed: raw video signature could not be read.");
@@ -101,19 +101,19 @@ public sealed class DesktopVideoComposeService
         var segmentKeys = new List<string>();
 
         var introKey = style.IntroSeconds > 0
-            ? HashToken($"intro|{style.Name}|{quality.Name}|{style.IntroSeconds}|{includeAudioTrack}")
+            ? _cacheManager.HashToken($"intro|{style.Name}|{quality.Name}|{style.IntroSeconds}|{includeAudioTrack}")
             : null;
 
         var outroKey = style.OutroSeconds > 0
-            ? HashToken($"outro|{style.Name}|{quality.Name}|{style.OutroSeconds}|{includeAudioTrack}")
+            ? _cacheManager.HashToken($"outro|{style.Name}|{quality.Name}|{style.OutroSeconds}|{includeAudioTrack}")
             : null;
 
         foreach (var clip in clips)
         {
             var narrationSignature = clip.IncludeNarration && HasNarrationFile(clip)
-                ? BuildFileSignature(clip.NarrationAudioPath!)
+                ? _cacheManager.BuildFileSignature(clip.NarrationAudioPath!)
                 : "none";
-            var key = HashToken(
+            var key = _cacheManager.HashToken(
                 $"clip|{rawSignature}|{quality.Name}|{style.Name}|{clip.StartSeconds:0.###}|{clip.DurationSeconds:0.###}|{clip.BannerText}|{clip.Label}|{clip.IncludeNarration}|{narrationSignature}|{includeAudioTrack}");
             segmentKeys.Add(key);
         }
@@ -138,14 +138,14 @@ public sealed class DesktopVideoComposeService
             composeKeyBuilder.Append("|o:").Append(outroKey);
         }
 
-        var composeKey = HashToken(composeKeyBuilder.ToString());
+        var composeKey = _cacheManager.HashToken(composeKeyBuilder.ToString());
         var finalCachePath = Path.Combine(cacheDirectory, $"final-{composeKey}.mp4");
         var latestPath = Path.Combine(curatedDirectory, "final-latest.mp4");
-        AddTelemetry(telemetryStages, "final-cache-lookup", 0, true, string.Empty, IsUsableFile(finalCachePath), true);
-        if (IsUsableFile(finalCachePath))
+        AddTelemetry(telemetryStages, "final-cache-lookup", 0, true, string.Empty, _cacheManager.IsUsableFile(finalCachePath), true);
+        if (_cacheManager.IsUsableFile(finalCachePath))
         {
             File.Copy(finalCachePath, latestPath, overwrite: true);
-            TryDeleteDirectory(runDirectory, composeOperationId);
+            _cacheManager.DeleteDirectory(runDirectory, composeOperationId);
             return CompleteResult(
                 DesktopVideoComposeResult.Success(latestPath, $"{quality.Name} (cache)"),
                 string.Empty);
@@ -167,17 +167,18 @@ public sealed class DesktopVideoComposeService
             if (!string.IsNullOrWhiteSpace(introKey))
             {
                 var introPath = Path.Combine(cacheDirectory, $"intro-{introKey}.mp4");
-                if (!IsUsableFile(introPath))
+                if (!_cacheManager.IsUsableFile(introPath))
                 {
                     var introArgs = BuildSlateArgs(introPath, quality, style, "DemoStudio", "Portfolio Demo", style.IntroSeconds, includeAudioTrack);
-                    var intro = await RunFfmpegStageAsync(
+                    var intro = await _stageExecutor.RunAsync(
                         ffmpegPath,
                         introArgs,
                         runDirectory,
                         "intro slate",
                         IntroOutroTimeout,
+                        composeOperationId,
                         cancellationToken);
-                    if (!intro.Succeeded || !IsUsableFile(introPath))
+                    if (!intro.Succeeded || !_cacheManager.IsUsableFile(introPath))
                     {
                         composeFailed = true;
                         AddTelemetry(telemetryStages, "intro-slate", intro.ElapsedMs, true, intro.FailureCode, false, false);
@@ -202,16 +203,17 @@ public sealed class DesktopVideoComposeService
                 var clip = clips[i];
                 var segmentKey = segmentKeys[i];
                 var segmentPath = Path.Combine(cacheDirectory, $"clip-{segmentKey}.mp4");
-                if (!IsUsableFile(segmentPath))
+                if (!_cacheManager.IsUsableFile(segmentPath))
                 {
                     var segmentArgs = BuildSegmentArgs(manifest.RawVideoPath, segmentPath, clip, quality, style, includeAudioTrack);
                     var segmentTimeout = ComputeSegmentTimeout(clip.DurationSeconds);
-                    var segment = await RunFfmpegStageAsync(
+                    var segment = await _stageExecutor.RunAsync(
                         ffmpegPath,
                         segmentArgs,
                         runDirectory,
                         $"segment {i + 1}",
                         segmentTimeout,
+                        composeOperationId,
                         cancellationToken);
                     if (!segment.Succeeded)
                     {
@@ -222,7 +224,7 @@ public sealed class DesktopVideoComposeService
                             segment.FailureCode);
                     }
 
-                    if (!IsUsableFile(segmentPath))
+                    if (!_cacheManager.IsUsableFile(segmentPath))
                     {
                         composeFailed = true;
                         AddTelemetry(telemetryStages, $"segment-{i + 1:000}", segment.ElapsedMs, true, "DS-COMP-OUTFILE", false, false);
@@ -244,17 +246,18 @@ public sealed class DesktopVideoComposeService
             if (!string.IsNullOrWhiteSpace(outroKey))
             {
                 var outroPath = Path.Combine(cacheDirectory, $"outro-{outroKey}.mp4");
-                if (!IsUsableFile(outroPath))
+                if (!_cacheManager.IsUsableFile(outroPath))
                 {
                     var outroArgs = BuildSlateArgs(outroPath, quality, style, "Thanks for watching", "Built with DemoStudio", style.OutroSeconds, includeAudioTrack);
-                    var outro = await RunFfmpegStageAsync(
+                    var outro = await _stageExecutor.RunAsync(
                         ffmpegPath,
                         outroArgs,
                         runDirectory,
                         "outro slate",
                         IntroOutroTimeout,
+                        composeOperationId,
                         cancellationToken);
-                    if (!outro.Succeeded || !IsUsableFile(outroPath))
+                    if (!outro.Succeeded || !_cacheManager.IsUsableFile(outroPath))
                     {
                         composeFailed = true;
                         AddTelemetry(telemetryStages, "outro-slate", outro.ElapsedMs, true, outro.FailureCode, false, false);
@@ -328,14 +331,15 @@ public sealed class DesktopVideoComposeService
                     "yuv420p",
                     finalPath
                 };
-            var compose = await RunFfmpegStageAsync(
+            var compose = await _stageExecutor.RunAsync(
                 ffmpegPath,
                 concatArgs,
                 runDirectory,
                 "final render",
                 ComputeFinalTimeout(totalDurationSeconds),
+                composeOperationId,
                 cancellationToken);
-            if (!compose.Succeeded || !IsUsableFile(finalPath))
+            if (!compose.Succeeded || !_cacheManager.IsUsableFile(finalPath))
             {
                 composeFailed = true;
                 AddTelemetry(telemetryStages, "final-render", compose.ElapsedMs, true, compose.FailureCode, false, false);
@@ -356,7 +360,7 @@ public sealed class DesktopVideoComposeService
         {
             if (!composeFailed)
             {
-                TryDeleteDirectory(runDirectory, composeOperationId);
+                _cacheManager.DeleteDirectory(runDirectory, composeOperationId);
             }
         }
 
@@ -374,11 +378,7 @@ public sealed class DesktopVideoComposeService
                 FailureCode: failureCode,
                 ElapsedMs: composeStopwatch.ElapsedMilliseconds,
                 Stages: telemetryStages);
-            TryWriteTelemetry(
-                telemetryPath,
-                envelope,
-                composeOperationId);
-            TryWriteHealthSnapshot(curatedDirectory, telemetryPath, cacheDirectory, envelope, composeOperationId);
+            _telemetryService.WriteArtifacts(curatedDirectory, telemetryPath, cacheDirectory, envelope, composeOperationId);
             if (result.Succeeded)
             {
                 _logger.LogInformation("Compose workflow completed successfully. OutputPath={OutputPath}", result.OutputPath);
@@ -607,200 +607,6 @@ public sealed class DesktopVideoComposeService
     private static bool HasNarrationFile(DesktopComposeClip clip)
         => !string.IsNullOrWhiteSpace(clip.NarrationAudioPath) && File.Exists(clip.NarrationAudioPath);
 
-    private bool IsUsableFile(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return false;
-        }
-
-        try
-        {
-            var info = new FileInfo(path);
-            return info.Length > 0;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed checking file usability for {Path}.", path);
-            return false;
-        }
-    }
-
-    private string BuildFileSignature(string path)
-    {
-        try
-        {
-            var info = new FileInfo(path);
-            if (!info.Exists)
-            {
-                return string.Empty;
-            }
-
-            return $"{path.ToLowerInvariant()}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed building file signature for {Path}.", path);
-            return string.Empty;
-        }
-    }
-
-    private static string HashToken(string text)
-    {
-        var bytes = Encoding.UTF8.GetBytes(text ?? string.Empty);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
-
-    private void TryDeleteDirectory(string path, string? composeOperationId = null)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
-
-        try
-        {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, true);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed deleting compose temp directory {Path}. ComposeOperationId={ComposeOperationId}", path, composeOperationId);
-        }
-    }
-
-    private void TryPruneComposeCache(string cacheDirectory, DateTimeOffset nowUtc, string? composeOperationId = null)
-    {
-        if (string.IsNullOrWhiteSpace(cacheDirectory) || !Directory.Exists(cacheDirectory))
-        {
-            return;
-        }
-
-        try
-        {
-            var stampPath = Path.Combine(cacheDirectory, ".prune.stamp");
-            if (File.Exists(stampPath))
-            {
-                var stampAge = nowUtc - File.GetLastWriteTimeUtc(stampPath);
-                if (stampAge < CachePruneInterval)
-                {
-                    return;
-                }
-            }
-
-            var expirationUtc = nowUtc - CacheMaxAge;
-            var root = new DirectoryInfo(cacheDirectory);
-            var files = root
-                .EnumerateFiles("*", SearchOption.AllDirectories)
-                .Where(file => !file.FullName.Contains($"{Path.DirectorySeparatorChar}tmp{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-                .Where(file => !string.Equals(file.Name, ".prune.stamp", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            foreach (var file in files)
-            {
-                if (file.LastWriteTimeUtc < expirationUtc.UtcDateTime)
-                {
-                    TryDeleteFile(file.FullName, composeOperationId);
-                }
-            }
-
-            files = root
-                .EnumerateFiles("*", SearchOption.AllDirectories)
-                .Where(file => !file.FullName.Contains($"{Path.DirectorySeparatorChar}tmp{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-                .Where(file => !string.Equals(file.Name, ".prune.stamp", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(file => file.LastWriteTimeUtc)
-                .ToList();
-
-            long totalBytes = 0;
-            foreach (var file in files)
-            {
-                totalBytes += SafeLength(file);
-            }
-
-            if (totalBytes > CacheMaxBytes)
-            {
-                foreach (var file in files)
-                {
-                    var length = SafeLength(file);
-                    TryDeleteFile(file.FullName, composeOperationId);
-                    totalBytes -= length;
-                    if (totalBytes <= CacheTrimTargetBytes)
-                    {
-                        break;
-                    }
-                }
-            }
-
-            TryDeleteEmptyDirectories(cacheDirectory, composeOperationId);
-            File.WriteAllText(stampPath, nowUtc.ToString("O", CultureInfo.InvariantCulture), Encoding.UTF8);
-            File.SetLastWriteTimeUtc(stampPath, nowUtc.UtcDateTime);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Compose cache prune failed for {CacheDirectory}. ComposeOperationId={ComposeOperationId}", cacheDirectory, composeOperationId);
-        }
-    }
-
-    private long SafeLength(FileInfo file)
-    {
-        try
-        {
-            return file.Exists ? file.Length : 0;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed reading file length for {Path}.", file.FullName);
-            return 0;
-        }
-    }
-
-    private void TryDeleteFile(string path, string? composeOperationId = null)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed deleting compose cache file {Path}. ComposeOperationId={ComposeOperationId}", path, composeOperationId);
-        }
-    }
-
-    private void TryDeleteEmptyDirectories(string rootPath, string? composeOperationId = null)
-    {
-        try
-        {
-            var dirs = Directory
-                .EnumerateDirectories(rootPath, "*", SearchOption.AllDirectories)
-                .OrderByDescending(x => x.Length)
-                .ToArray();
-            foreach (var dir in dirs)
-            {
-                try
-                {
-                    if (!Directory.EnumerateFileSystemEntries(dir).Any())
-                    {
-                        Directory.Delete(dir, false);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Failed deleting empty compose cache directory {DirectoryPath}. ComposeOperationId={ComposeOperationId}", dir, composeOperationId);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed enumerating compose cache directories under {RootPath}. ComposeOperationId={ComposeOperationId}", rootPath, composeOperationId);
-        }
-    }
-
     private static string TrimError(string? stderr)
     {
         if (string.IsNullOrWhiteSpace(stderr))
@@ -853,66 +659,6 @@ public sealed class DesktopVideoComposeService
         return computed > MaxFinalTimeout ? MaxFinalTimeout : computed;
     }
 
-    private async Task<ComposeStageOutcome> RunFfmpegStageAsync(
-        string ffmpegPath,
-        IReadOnlyList<string> arguments,
-        string workingDirectory,
-        string stageName,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        try
-        {
-            await using var handle = await _processLauncher.StartProcessAsync(
-                new ProcessStartRequest(
-                    ffmpegPath,
-                    string.Empty,
-                    workingDirectory,
-                    timeout,
-                    arguments,
-                    $"ffmpeg-compose-{stageName.Replace(' ', '-')}",
-                    Path.GetFileNameWithoutExtension(workingDirectory)),
-                cancellationToken);
-            var execution = await handle.WaitAsync(cancellationToken);
-            if (execution.Cancelled)
-            {
-                return ComposeStageOutcome.Failure("DS-COMP-CANCEL", $"{stageName} cancelled.", stopwatch.ElapsedMilliseconds);
-            }
-
-            if (execution.TimedOut)
-            {
-                return ComposeStageOutcome.Failure("DS-COMP-TIMEOUT", $"{stageName} timed out after {timeout.TotalSeconds:0}s.", stopwatch.ElapsedMilliseconds);
-            }
-
-            if (execution.ExitCode != 0)
-            {
-                return ComposeStageOutcome.Failure("DS-COMP-FFMPEG", execution.StdErr, stopwatch.ElapsedMilliseconds);
-            }
-
-            _logger.LogInformation("Compose stage {StageName} completed in {ElapsedMs} ms.", stageName, stopwatch.ElapsedMilliseconds);
-            return ComposeStageOutcome.Success(stopwatch.ElapsedMilliseconds);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogWarning("Compose stage {StageName} cancelled after {ElapsedMs} ms.", stageName, stopwatch.ElapsedMilliseconds);
-            return ComposeStageOutcome.Failure("DS-COMP-CANCEL", $"{stageName} cancelled.", stopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Compose stage {StageName} failed to start after {ElapsedMs} ms.", stageName, stopwatch.ElapsedMilliseconds);
-            return ComposeStageOutcome.Failure("DS-COMP-START", $"{stageName} failed to start: {ex.Message}", stopwatch.ElapsedMilliseconds);
-        }
-    }
-
-    private sealed record ComposeStageOutcome(bool Succeeded, string FailureCode, string Message, long ElapsedMs)
-    {
-        public static ComposeStageOutcome Success(long elapsedMs) => new(true, string.Empty, string.Empty, elapsedMs);
-
-        public static ComposeStageOutcome Failure(string code, string message, long elapsedMs)
-            => new(false, code, message ?? string.Empty, elapsedMs);
-    }
-
     private static void AddTelemetry(
         ICollection<ComposeTelemetryStage> stages,
         string stage,
@@ -930,227 +676,7 @@ public sealed class DesktopVideoComposeService
             FailureCode: failureCode,
             CacheHit: cacheHit));
     }
-
-    private void TryWriteTelemetry(string outputPath, ComposeTelemetryEnvelope envelope, string? composeOperationId = null)
-    {
-        try
-        {
-            var line = JsonSerializer.Serialize(envelope);
-            var dir = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrWhiteSpace(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
-            File.AppendAllText(outputPath, line + Environment.NewLine, Encoding.UTF8);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed writing compose telemetry to {OutputPath}. ComposeOperationId={ComposeOperationId}", outputPath, composeOperationId);
-        }
-    }
-
-    private void TryWriteHealthSnapshot(
-        string curatedDirectory,
-        string telemetryPath,
-        string cacheDirectory,
-        ComposeTelemetryEnvelope latest,
-        string? composeOperationId = null)
-    {
-        try
-        {
-            var outputPath = DesktopStoragePaths.GetComposeHealthPath(curatedDirectory);
-            var runs = ReadTelemetryRuns(telemetryPath, 200);
-            var cacheStats = GetCacheStats(cacheDirectory);
-            var summary = BuildTelemetrySummary(runs, latest);
-            var snapshot = new ComposeHealthSnapshot(
-                GeneratedUtc: DateTimeOffset.UtcNow,
-                LatestRun: latest,
-                Summary: summary,
-                Cache: cacheStats);
-            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = true
-            });
-            File.WriteAllText(outputPath, json, Encoding.UTF8);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed writing compose health snapshot for {CuratedDirectory}. ComposeOperationId={ComposeOperationId}", curatedDirectory, composeOperationId);
-        }
-    }
-
-    private List<ComposeTelemetryEnvelope> ReadTelemetryRuns(string telemetryPath, int maxRuns)
-    {
-        var result = new List<ComposeTelemetryEnvelope>();
-        if (string.IsNullOrWhiteSpace(telemetryPath) || !File.Exists(telemetryPath) || maxRuns <= 0)
-        {
-            return result;
-        }
-
-        try
-        {
-            var lines = File.ReadAllLines(telemetryPath);
-            for (var i = lines.Length - 1; i >= 0 && result.Count < maxRuns; i--)
-            {
-                var line = lines[i];
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    continue;
-                }
-
-                var item = JsonSerializer.Deserialize<ComposeTelemetryEnvelope>(line);
-                if (item is not null)
-                {
-                    result.Add(item);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed reading compose telemetry runs from {TelemetryPath}.", telemetryPath);
-            return new List<ComposeTelemetryEnvelope>();
-        }
-
-        result.Reverse();
-        return result;
-    }
-
-    private static ComposeTelemetrySummary BuildTelemetrySummary(
-        IReadOnlyList<ComposeTelemetryEnvelope> runs,
-        ComposeTelemetryEnvelope latest)
-    {
-        var runCount = runs.Count;
-        var successCount = runs.Count(x => x.Succeeded);
-        var successRate = runCount == 0 ? 0d : (double)successCount / runCount;
-        var elapsedSamples = runs.Select(x => (double)x.ElapsedMs).OrderBy(x => x).ToArray();
-        var averageMs = elapsedSamples.Length == 0 ? 0d : elapsedSamples.Average();
-        var p95Ms = Percentile(elapsedSamples, 95);
-
-        var stageEvents = runs
-            .SelectMany(x => x.Stages ?? Array.Empty<ComposeTelemetryStage>())
-            .Where(x => x.Attempted)
-            .ToArray();
-        var cacheHitCount = stageEvents.Count(x => x.CacheHit);
-        var cacheHitRate = stageEvents.Length == 0 ? 0d : (double)cacheHitCount / stageEvents.Length;
-
-        return new ComposeTelemetrySummary(
-            RunCount: runCount,
-            SuccessCount: successCount,
-            SuccessRate: successRate,
-            AverageElapsedMs: averageMs,
-            P95ElapsedMs: p95Ms,
-            StageEventCount: stageEvents.Length,
-            CacheHitRate: cacheHitRate,
-            LastFailureCode: latest.FailureCode,
-            LastFailureAtUtc: string.IsNullOrWhiteSpace(latest.FailureCode) ? null : latest.TimestampUtc);
-    }
-
-    private static double Percentile(double[] sortedSamples, int percentile)
-    {
-        if (sortedSamples.Length == 0)
-        {
-            return 0d;
-        }
-
-        if (sortedSamples.Length == 1)
-        {
-            return sortedSamples[0];
-        }
-
-        var position = (percentile / 100d) * (sortedSamples.Length - 1);
-        var lower = (int)Math.Floor(position);
-        var upper = (int)Math.Ceiling(position);
-        if (lower == upper)
-        {
-            return sortedSamples[lower];
-        }
-
-        var weight = position - lower;
-        return sortedSamples[lower] + ((sortedSamples[upper] - sortedSamples[lower]) * weight);
-    }
-
-    private ComposeCacheStats GetCacheStats(string cacheDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(cacheDirectory) || !Directory.Exists(cacheDirectory))
-        {
-            return new ComposeCacheStats(0, 0, null, null);
-        }
-
-        try
-        {
-            var files = Directory
-                .EnumerateFiles(cacheDirectory, "*", SearchOption.AllDirectories)
-                .Where(x => !x.Contains($"{Path.DirectorySeparatorChar}tmp{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
-                .Where(x => !x.EndsWith(".prune.stamp", StringComparison.OrdinalIgnoreCase))
-                .Select(path => new FileInfo(path))
-                .ToArray();
-            if (files.Length == 0)
-            {
-                return new ComposeCacheStats(0, 0, null, null);
-            }
-
-            var totalBytes = files.Sum(file => SafeLength(file));
-            var oldest = files.Min(file => file.LastWriteTimeUtc);
-            var newest = files.Max(file => file.LastWriteTimeUtc);
-            return new ComposeCacheStats(
-                FileCount: files.Length,
-                TotalBytes: totalBytes,
-                OldestWriteUtc: oldest,
-                NewestWriteUtc: newest);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed reading compose cache stats for {CacheDirectory}.", cacheDirectory);
-            return new ComposeCacheStats(0, 0, null, null);
-        }
-    }
 }
-
-internal sealed record ComposeTelemetryEnvelope(
-    DateTimeOffset TimestampUtc,
-    string ComposeKey,
-    Guid SessionId,
-    string QualityPreset,
-    string ExportStyle,
-    int ClipCount,
-    double TotalDurationSeconds,
-    bool Succeeded,
-    string FailureCode,
-    long ElapsedMs,
-    IReadOnlyList<ComposeTelemetryStage> Stages);
-
-internal sealed record ComposeTelemetryStage(
-    string Stage,
-    long ElapsedMs,
-    bool Attempted,
-    bool Succeeded,
-    string FailureCode,
-    bool CacheHit);
-
-internal sealed record ComposeHealthSnapshot(
-    DateTimeOffset GeneratedUtc,
-    ComposeTelemetryEnvelope LatestRun,
-    ComposeTelemetrySummary Summary,
-    ComposeCacheStats Cache);
-
-internal sealed record ComposeTelemetrySummary(
-    int RunCount,
-    int SuccessCount,
-    double SuccessRate,
-    double AverageElapsedMs,
-    double P95ElapsedMs,
-    int StageEventCount,
-    double CacheHitRate,
-    string LastFailureCode,
-    DateTimeOffset? LastFailureAtUtc);
-
-internal sealed record ComposeCacheStats(
-    int FileCount,
-    long TotalBytes,
-    DateTimeOffset? OldestWriteUtc,
-    DateTimeOffset? NewestWriteUtc);
 
 public sealed record DesktopVideoComposeResult(bool Succeeded, string Message, string? OutputPath)
 {
@@ -1159,44 +685,4 @@ public sealed record DesktopVideoComposeResult(bool Succeeded, string Message, s
 
     public static DesktopVideoComposeResult Failure(string message)
         => new(false, message, null);
-}
-
-internal sealed record ComposeQualityProfile(string Name, string Preset, double Crf)
-{
-    public static ComposeQualityProfile Normalize(string? presetName)
-    {
-        return (presetName ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "fast" => new ComposeQualityProfile("Fast", "ultrafast", 29d),
-            "portfolio" => new ComposeQualityProfile("Portfolio", "slow", 18d),
-            _ => new ComposeQualityProfile("Balanced", "veryfast", 23d)
-        };
-    }
-}
-
-internal sealed record ComposeStyleProfile(
-    string Name,
-    string FontPath,
-    string FontColor,
-    string SubColor,
-    string LowerThirdBoxColor,
-    string SlateColor,
-    int TitleSize,
-    int SubtitleSize,
-    int LowerThirdSize,
-    int IntroSeconds,
-    int OutroSeconds)
-{
-    public static ComposeStyleProfile Normalize(string? style)
-    {
-        var font = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Fonts),
-            "arial.ttf");
-        return (style ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "tutorial" => new ComposeStyleProfile("Tutorial", font, "white", "white@0.82", "black@0.6", "0x1E293B", 64, 34, 30, 2, 2),
-            "social reel" => new ComposeStyleProfile("Social Reel", font, "white", "white@0.9", "0x111111@0.75", "0x111827", 72, 36, 40, 1, 1),
-            _ => new ComposeStyleProfile("Portfolio Clean", font, "white", "white@0.82", "black@0.45", "0x0F172A", 60, 32, 30, 2, 2)
-        };
-    }
 }

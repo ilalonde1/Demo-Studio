@@ -4,6 +4,7 @@ using System.Text.Json;
 using DemoStudio.Automation.Abstractions.Interfaces;
 using DemoStudio.Domain.Enums;
 
+// Intentional runtime fallback when desktop automation is configured for the stub provider.
 public sealed class StubDesktopAutomationEngine : IDesktopAutomationEngine
 {
     public async Task<AutomationExecutionResult> ExecuteAsync(AutomationExecutionRequest request, CancellationToken cancellationToken = default)

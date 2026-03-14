@@ -3,6 +3,7 @@ namespace DemoStudio.Infrastructure.Execution;
 using DemoStudio.Application.Services;
 using DemoStudio.Domain.Entities;
 
+// Intentional runtime fallback when desktop inspection is not backed by FlaUI.
 public sealed class StubDesktopInspectionService : IDesktopInspectionService
 {
     public Task<ElementInspectionResult> InspectAsync(ApplicationTarget target, CancellationToken cancellationToken = default)

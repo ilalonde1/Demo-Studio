@@ -3,6 +3,7 @@ namespace DemoStudio.Infrastructure.Execution;
 using System.Text;
 using DemoStudio.Capture.Abstractions.Interfaces;
 
+// Intentional runtime fallback used when capture is configured for the stub provider.
 public sealed class StubVideoCaptureService : IVideoCaptureService
 {
     public async Task<CaptureSessionStartResult> StartAsync(CaptureStartRequest request, CancellationToken cancellationToken = default)

@@ -2,6 +2,7 @@ namespace DemoStudio.Infrastructure.Execution;
 
 using DemoStudio.Redaction.Abstractions.Interfaces;
 
+// Intentional runtime fallback used when redaction is left on the stub implementation.
 public sealed class StubRedactionProcessor : IRedactionProcessor
 {
     public Task<RedactionResult> ProcessAsync(RedactionRequest request, CancellationToken cancellationToken = default)
