@@ -49,7 +49,7 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
         try
         {
             var rawVideoPath = ResolveRawVideoPath(request);
-            var (arguments, modeUsed, windowTitle, processId, bounds) = await BuildStartArgumentsAsync(request, rawVideoPath, cancellationToken);
+            var (argumentList, modeUsed, windowTitle, processId, bounds) = await BuildStartArgumentsAsync(request, rawVideoPath, cancellationToken);
 
             _logger.LogInformation("Starting FFmpeg capture for run {RunId} in mode {Mode} with executable {Executable}.", request.Run.Id, modeUsed, _options.FfmpegPath);
 
@@ -67,7 +67,14 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
             }
 
             var handle = await _processLauncher.StartProcessAsync(
-                new ProcessStartRequest(_options.FfmpegPath, arguments, request.OutputDirectory, CaptureProcessWaitTimeout),
+                new ProcessStartRequest(
+                    _options.FfmpegPath,
+                    string.Empty,
+                    request.OutputDirectory,
+                    CaptureProcessWaitTimeout,
+                    argumentList,
+                    "ffmpeg-capture",
+                    request.Run.Id.ToString("N")),
                 cancellationToken);
 
             var state = new CaptureProcessState(handle, rawVideoPath, modeUsed, windowTitle, processId, bounds);
@@ -207,7 +214,7 @@ public sealed class FfmpegVideoCaptureService : IVideoCaptureService
         }
     }
 
-    private async Task<(string Arguments, string ModeUsed, string? WindowTitle, int? ProcessId, WindowBounds? Bounds)> BuildStartArgumentsAsync(
+    private async Task<(IReadOnlyList<string> ArgumentList, string ModeUsed, string? WindowTitle, int? ProcessId, WindowBounds? Bounds)> BuildStartArgumentsAsync(
         CaptureStartRequest request,
         string rawVideoPath,
         CancellationToken cancellationToken)

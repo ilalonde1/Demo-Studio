@@ -67,7 +67,7 @@ public sealed class ReliabilityWorkflowTests
                 processLauncher,
                 NullLogger<FfmpegVideoCaptureService>.Instance);
             var runtime = new DesktopCaptureRuntime(options, processLauncher, captureFactory, new DesktopWindowLocator());
-            var service = new DesktopDependencyHealthService(runtime, new DesktopProcessRunner());
+            var service = new DesktopDependencyHealthService(runtime, processLauncher);
 
             var snapshot = await service.RefreshAsync();
 

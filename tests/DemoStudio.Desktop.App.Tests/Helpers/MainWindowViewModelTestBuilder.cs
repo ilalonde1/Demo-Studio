@@ -47,7 +47,7 @@ internal static class MainWindowViewModelTestBuilder
             captureRuntime: captureRuntime,
             windowCatalogService: new DesktopWindowCatalogService(),
             launchProfileService: new DesktopLaunchProfileService(root),
-            targetLauncher: new DesktopTargetLauncher(processRunner),
+            targetLauncher: new DesktopTargetLauncher(processLauncher),
             preflightService: new DesktopCapturePreflightService(windowLocator),
             windowFocusService: new DesktopWindowFocusService(windowLocator),
             sessionHistoryService: new DesktopSessionHistoryService(root),
@@ -62,14 +62,14 @@ internal static class MainWindowViewModelTestBuilder
             sessionRecoveryService: new DesktopSessionRecoveryService(root),
             presenterViewService: new DesktopPresenterViewService(),
             processRunner: processRunner,
-            captureMediaCoordinator: new DesktopCaptureMediaCoordinator(captureRuntime, processRunner),
+            captureMediaCoordinator: new DesktopCaptureMediaCoordinator(captureRuntime, processLauncher, processRunner),
             narrationCoordinator: new DesktopNarrationCoordinator(captureRuntime,
                 new DesktopClipNarrationService(new NoOpProcessLauncher()),
                 new DesktopAiNarrationService(new HttpClient(new NoOpHttpMessageHandler())),
                 processRunner),
             captureWatchdogCoordinator: new DesktopCaptureWatchdogCoordinator(windowLocator),
             clipCurationCoordinator: new DesktopClipCurationCoordinator(),
-            dependencyHealthService: new DesktopDependencyHealthService(captureRuntime, processRunner),
+            dependencyHealthService: new DesktopDependencyHealthService(captureRuntime, processLauncher),
             ffmpegOperationQueue: new DesktopFfmpegOperationQueue());
     }
 

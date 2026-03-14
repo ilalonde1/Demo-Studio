@@ -105,10 +105,27 @@ public sealed class DesktopPublishPackageService
 
         try
         {
-            var args =
-                $"-y -ss 00:00:01 -i \"{sourceVideo.Replace("\"", "\\\"", StringComparison.Ordinal)}\" -frames:v 1 -q:v 2 \"{thumbnailOutput.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+            var arguments = new[]
+            {
+                "-y",
+                "-ss",
+                "00:00:01",
+                "-i",
+                sourceVideo,
+                "-frames:v",
+                "1",
+                "-q:v",
+                "2",
+                thumbnailOutput
+            };
             var result = await _processLauncher.LaunchAsync(
-                new ProcessLaunchRequest(ffmpegPath, args, workingDirectory),
+                new ProcessLaunchRequest(
+                    ffmpegPath,
+                    string.Empty,
+                    workingDirectory,
+                    arguments,
+                    "ffmpeg-publish-thumbnail",
+                    Path.GetFileNameWithoutExtension(thumbnailOutput)),
                 cancellationToken);
 
             return result.Started && result.Execution is not null && result.Execution.ExitCode == 0 && File.Exists(thumbnailOutput);

@@ -1,15 +1,17 @@
-using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.IO;
+using DemoStudio.Application.Abstractions.System;
 
 namespace DemoStudio.Desktop.App.Services;
 
-public sealed class DesktopTargetLauncher
+public sealed class DesktopTargetLauncher : IDisposable, IAsyncDisposable
 {
-    private readonly DesktopProcessRunner _processRunner;
+    private readonly IProcessLauncher _processLauncher;
+    private readonly ConcurrentDictionary<int, IProcessHandle> _activeLaunchHandles = new();
 
-    public DesktopTargetLauncher(DesktopProcessRunner processRunner)
+    public DesktopTargetLauncher(IProcessLauncher processLauncher)
     {
-        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
     }
 
     public async Task<DesktopTargetLaunchResult> LaunchAsync(DesktopLaunchProfile profile, CancellationToken cancellationToken = default)
@@ -35,16 +37,32 @@ public sealed class DesktopTargetLauncher
             return DesktopTargetLaunchResult.Failure($"Working directory not found: '{workingDirectory}'.");
         }
 
-        var launchResult = _processRunner.StartDetached(new ProcessStartInfo
+        IProcessHandle handle;
+        try
         {
-            FileName = executablePath,
-            Arguments = profile.Arguments ?? string.Empty,
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = true
-        });
-        if (!launchResult.Succeeded)
+            handle = await _processLauncher.StartProcessAsync(
+                new ProcessStartRequest(
+                    executablePath,
+                    profile.Arguments ?? string.Empty,
+                    workingDirectory,
+                    Timeout: null,
+                    ArgumentList: null,
+                    OperationName: "target-launch",
+                    CorrelationId: Path.GetFileNameWithoutExtension(executablePath)),
+                cancellationToken);
+        }
+        catch (Exception ex)
         {
-            return DesktopTargetLaunchResult.Failure(launchResult.ErrorMessage ?? "Failed to launch target process.");
+            return DesktopTargetLaunchResult.Failure(ex.Message);
+        }
+
+        if (handle.ProcessId is int processId)
+        {
+            _activeLaunchHandles[processId] = handle;
+        }
+        else
+        {
+            await handle.DisposeAsync();
         }
 
         if (profile.StartupDelaySeconds > 0)
@@ -53,6 +71,38 @@ public sealed class DesktopTargetLauncher
         }
 
         return DesktopTargetLaunchResult.Success($"Launched '{Path.GetFileName(executablePath)}'.");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var handle in _activeLaunchHandles.Values)
+        {
+            try
+            {
+                await handle.DisposeAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        _activeLaunchHandles.Clear();
+    }
+
+    public void Dispose()
+    {
+        foreach (var handle in _activeLaunchHandles.Values)
+        {
+            try
+            {
+                handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch
+            {
+            }
+        }
+
+        _activeLaunchHandles.Clear();
     }
 }
 

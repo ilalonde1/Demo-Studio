@@ -48,7 +48,13 @@ public sealed class FlaUIDesktopInspectionService : IDesktopInspectionService
             var workingDirectory = Path.GetDirectoryName(runnerExePath) ?? Environment.CurrentDirectory;
 
             var launchResult = await _processLauncher.LaunchAsync(
-                new ProcessLaunchRequest(runnerExePath, arguments, workingDirectory),
+                new ProcessLaunchRequest(
+                    runnerExePath,
+                    string.Empty,
+                    workingDirectory,
+                    arguments,
+                    "flaui-runner-inspection",
+                    target.Id.ToString("N")),
                 cancellationToken);
 
             if (!launchResult.Started)

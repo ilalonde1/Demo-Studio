@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Infrastructure;
 using DemoStudio.Desktop.App.ViewModels;
 
@@ -12,15 +13,20 @@ public sealed class DesktopCaptureMediaCoordinator
     public sealed record ClipPreviewOpenResult(bool Succeeded, string Message);
 
     private readonly DesktopCaptureRuntime _captureRuntime;
+    private readonly IProcessLauncher _processLauncher;
     private readonly DesktopProcessRunner _processRunner;
     private readonly SemaphoreSlim _thumbnailGenerationSemaphore = new(1, 1);
     private readonly ConcurrentDictionary<string, byte> _thumbnailGenerationInFlight = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _thumbnailGenerationAttempts = new(StringComparer.OrdinalIgnoreCase);
     private bool _ffmpegLaunchDisabled;
 
-    public DesktopCaptureMediaCoordinator(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner processRunner)
+    public DesktopCaptureMediaCoordinator(
+        DesktopCaptureRuntime captureRuntime,
+        IProcessLauncher processLauncher,
+        DesktopProcessRunner processRunner)
     {
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
+        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _ffmpegLaunchDisabled = !_captureRuntime.IsFfmpegAvailable;
     }
@@ -111,28 +117,52 @@ public sealed class DesktopCaptureMediaCoordinator
             var clipDuration = Math.Max(1d, clip.DurationSeconds);
             var startValue = startSeconds.ToString("0.###", CultureInfo.InvariantCulture);
             var durationValue = clipDuration.ToString("0.###", CultureInfo.InvariantCulture);
-            var sourceValue = rawVideoPath.Replace("\"", "\\\"", StringComparison.Ordinal);
-            var outputValue = previewPath.Replace("\"", "\\\"", StringComparison.Ordinal);
-            var arguments =
-                $"-y -ss {startValue} -i \"{sourceValue}\" -t {durationValue} -vf \"scale=960:-2\" -c:v libx264 -preset veryfast -crf 30 -pix_fmt yuv420p -movflags +faststart -an \"{outputValue}\"";
-
-            var startInfo = new ProcessStartInfo
+            var arguments = new[]
             {
-                FileName = ffmpegPath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
+                "-y",
+                "-ss",
+                startValue,
+                "-i",
+                rawVideoPath,
+                "-t",
+                durationValue,
+                "-vf",
+                "scale=960:-2",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "30",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-an",
+                previewPath
             };
 
-            var result = await _processRunner.RunAsync(startInfo, TimeSpan.FromSeconds(20));
-            if (result.StartFailed)
+            var result = await _processLauncher.LaunchAsync(
+                new ProcessLaunchRequest(
+                    ffmpegPath,
+                    string.Empty,
+                    previewRoot,
+                    arguments,
+                    "ffmpeg-clip-preview",
+                    sessionKey),
+                cancellationToken: CancellationToken.None);
+            if (!result.Started)
             {
                 _ffmpegLaunchDisabled = true;
             }
 
-            if (result.Succeeded && File.Exists(previewPath) && new FileInfo(previewPath).Length > 1024)
+            if (result.Started
+                && result.Execution is not null
+                && result.Execution.ExitCode == 0
+                && !result.Execution.TimedOut
+                && !result.Execution.Cancelled
+                && File.Exists(previewPath)
+                && new FileInfo(previewPath).Length > 1024)
             {
                 return TryOpenMedia(previewPath, $"Opened preview for {clip.Label}.");
             }
@@ -191,20 +221,28 @@ public sealed class DesktopCaptureMediaCoordinator
             await _thumbnailGenerationSemaphore.WaitAsync();
             semaphoreHeld = true;
 
-            var escapedInput = rawVideoPath.Replace("\"", "\\\"", StringComparison.Ordinal);
-            var escapedOutput = thumbnailPath.Replace("\"", "\\\"", StringComparison.Ordinal);
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = ffmpegPath,
-                Arguments = $"-y -ss {seekValue} -i \"{escapedInput}\" -frames:v 1 -q:v 5 \"{escapedOutput}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
-            };
-
-            var processResult = await _processRunner.RunAsync(startInfo, TimeSpan.FromSeconds(12));
-            if (processResult.StartFailed)
+            var processResult = await _processLauncher.LaunchAsync(
+                new ProcessLaunchRequest(
+                    ffmpegPath,
+                    string.Empty,
+                    thumbnailsRoot,
+                    new[]
+                    {
+                        "-y",
+                        "-ss",
+                        seekValue,
+                        "-i",
+                        rawVideoPath,
+                        "-frames:v",
+                        "1",
+                        "-q:v",
+                        "5",
+                        thumbnailPath
+                    },
+                    "ffmpeg-thumbnail-primary",
+                    sessionKey),
+                CancellationToken.None);
+            if (!processResult.Started)
             {
                 _ffmpegLaunchDisabled = true;
                 return;
@@ -216,26 +254,44 @@ public sealed class DesktopCaptureMediaCoordinator
                 semaphoreHeld = false;
             }
 
-            if (!processResult.Succeeded || !File.Exists(thumbnailPath))
+            if (processResult.Execution is null
+                || processResult.Execution.ExitCode != 0
+                || processResult.Execution.TimedOut
+                || processResult.Execution.Cancelled
+                || !File.Exists(thumbnailPath))
             {
-                var retryInfo = new ProcessStartInfo
-                {
-                    FileName = ffmpegPath,
-                    Arguments = $"-y -i \"{escapedInput}\" -ss {seekValue} -frames:v 1 -q:v 5 \"{escapedOutput}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true
-                };
-
-                var retryResult = await _processRunner.RunAsync(retryInfo, TimeSpan.FromSeconds(12));
-                if (retryResult.StartFailed)
+                var retryResult = await _processLauncher.LaunchAsync(
+                    new ProcessLaunchRequest(
+                        ffmpegPath,
+                        string.Empty,
+                        thumbnailsRoot,
+                        new[]
+                        {
+                            "-y",
+                            "-i",
+                            rawVideoPath,
+                            "-ss",
+                            seekValue,
+                            "-frames:v",
+                            "1",
+                            "-q:v",
+                            "5",
+                            thumbnailPath
+                        },
+                        "ffmpeg-thumbnail-retry",
+                        sessionKey),
+                    CancellationToken.None);
+                if (!retryResult.Started)
                 {
                     _ffmpegLaunchDisabled = true;
                     return;
                 }
 
-                if (!retryResult.Succeeded || !File.Exists(thumbnailPath))
+                if (retryResult.Execution is null
+                    || retryResult.Execution.ExitCode != 0
+                    || retryResult.Execution.TimedOut
+                    || retryResult.Execution.Cancelled
+                    || !File.Exists(thumbnailPath))
                 {
                     return;
                 }

@@ -48,10 +48,14 @@ public sealed class FfmpegVideoCaptureServiceRegressionTests
 
             Assert.True(start.Succeeded);
             Assert.NotNull(launcher.LastStartRequest);
-            var args = launcher.LastStartRequest!.Arguments;
-            Assert.Contains("-offset_x -1920", args, StringComparison.Ordinal);
-            Assert.Contains("-offset_y 0", args, StringComparison.Ordinal);
-            Assert.Contains("-video_size 1921x1040", args, StringComparison.Ordinal);
+            var args = launcher.LastStartRequest!.ArgumentList;
+            Assert.NotNull(args);
+            Assert.Contains("-offset_x", args!);
+            Assert.Contains("-1920", args!);
+            Assert.Contains("-offset_y", args!);
+            Assert.Contains("0", args!);
+            Assert.Contains("-video_size", args!);
+            Assert.Contains("1921x1040", args!);
         }
         finally
         {

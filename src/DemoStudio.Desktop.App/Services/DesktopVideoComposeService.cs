@@ -273,8 +273,49 @@ public sealed class DesktopVideoComposeService
 
             var finalPath = Path.Combine(runDirectory, "final.mp4");
             var concatArgs = includeAudioTrack
-                ? $"-y -f concat -safe 0 -i {Quote(concatListPath)} -c:v libx264 -preset {quality.Preset} -crf {quality.Crf.ToString(CultureInfo.InvariantCulture)} -c:a aac -b:a 160k -pix_fmt yuv420p {Quote(finalPath)}"
-                : $"-y -f concat -safe 0 -i {Quote(concatListPath)} -an -c:v libx264 -preset {quality.Preset} -crf {quality.Crf.ToString(CultureInfo.InvariantCulture)} -pix_fmt yuv420p {Quote(finalPath)}";
+                ? new List<string>
+                {
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    concatListPath,
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    quality.Preset,
+                    "-crf",
+                    quality.Crf.ToString(CultureInfo.InvariantCulture),
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "160k",
+                    "-pix_fmt",
+                    "yuv420p",
+                    finalPath
+                }
+                : new List<string>
+                {
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    concatListPath,
+                    "-an",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    quality.Preset,
+                    "-crf",
+                    quality.Crf.ToString(CultureInfo.InvariantCulture),
+                    "-pix_fmt",
+                    "yuv420p",
+                    finalPath
+                };
             var compose = await RunFfmpegStageAsync(
                 ffmpegPath,
                 concatArgs,
@@ -329,7 +370,7 @@ public sealed class DesktopVideoComposeService
         }
     }
 
-    private static string BuildSegmentArgs(
+    private static IReadOnlyList<string> BuildSegmentArgs(
         string rawPath,
         string outputPath,
         DesktopComposeClip clip,
@@ -345,21 +386,109 @@ public sealed class DesktopVideoComposeService
         {
             if (clip.IncludeNarration && HasNarrationFile(clip))
             {
-                return
-                    $"-y -ss {start} -t {duration} -i {Quote(rawPath)} -stream_loop -1 -i {Quote(clip.NarrationAudioPath!)} -vf {Quote(vf)} -map 0:v:0 -map 1:a:0 -t {duration} -c:v libx264 -preset {quality.Preset} -crf {quality.Crf.ToString(CultureInfo.InvariantCulture)} -c:a aac -b:a 160k -pix_fmt yuv420p {Quote(outputPath)}";
+                return new[]
+                {
+                    "-y",
+                    "-ss",
+                    start,
+                    "-t",
+                    duration,
+                    "-i",
+                    rawPath,
+                    "-stream_loop",
+                    "-1",
+                    "-i",
+                    clip.NarrationAudioPath!,
+                    "-vf",
+                    vf,
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
+                    "-t",
+                    duration,
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    quality.Preset,
+                    "-crf",
+                    quality.Crf.ToString(CultureInfo.InvariantCulture),
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "160k",
+                    "-pix_fmt",
+                    "yuv420p",
+                    outputPath
+                };
             }
 
-            var audioFilter = clip.IncludeNarration ? null : "volume=0";
-            var afArg = string.IsNullOrWhiteSpace(audioFilter) ? string.Empty : $" -af {Quote(audioFilter)}";
-            return
-                $"-y -ss {start} -t {duration} -i {Quote(rawPath)} -vf {Quote(vf)}{afArg} -c:v libx264 -preset {quality.Preset} -crf {quality.Crf.ToString(CultureInfo.InvariantCulture)} -map 0:v:0 -map 0:a:0? -c:a aac -b:a 160k -pix_fmt yuv420p {Quote(outputPath)}";
+            var args = new List<string>
+            {
+                "-y",
+                "-ss",
+                start,
+                "-t",
+                duration,
+                "-i",
+                rawPath,
+                "-vf",
+                vf
+            };
+            if (!clip.IncludeNarration)
+            {
+                args.Add("-af");
+                args.Add("volume=0");
+            }
+
+            args.AddRange(new[]
+            {
+                "-c:v",
+                "libx264",
+                "-preset",
+                quality.Preset,
+                "-crf",
+                quality.Crf.ToString(CultureInfo.InvariantCulture),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "160k",
+                "-pix_fmt",
+                "yuv420p",
+                outputPath
+            });
+            return args;
         }
 
-        return
-            $"-y -ss {start} -t {duration} -i {Quote(rawPath)} -an -vf {Quote(vf)} -c:v libx264 -preset {quality.Preset} -crf {quality.Crf.ToString(CultureInfo.InvariantCulture)} -pix_fmt yuv420p {Quote(outputPath)}";
+        return new[]
+        {
+            "-y",
+            "-ss",
+            start,
+            "-t",
+            duration,
+            "-i",
+            rawPath,
+            "-an",
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-preset",
+            quality.Preset,
+            "-crf",
+            quality.Crf.ToString(CultureInfo.InvariantCulture),
+            "-pix_fmt",
+            "yuv420p",
+            outputPath
+        };
     }
 
-    private static string BuildSlateArgs(
+    private static IReadOnlyList<string> BuildSlateArgs(
         string outputPath,
         ComposeQualityProfile quality,
         ComposeStyleProfile style,
@@ -374,10 +503,56 @@ public sealed class DesktopVideoComposeService
         var drawTitle = $"drawtext=fontfile='{font}':text='{safeTitle}':fontcolor={style.FontColor}:fontsize={style.TitleSize}:x=(w-text_w)/2:y=(h/2)-70";
         var drawSub = $"drawtext=fontfile='{font}':text='{safeSubtitle}':fontcolor={style.SubColor}:fontsize={style.SubtitleSize}:x=(w-text_w)/2:y=(h/2)+10";
         var vf = $"{drawTitle},{drawSub},scale=trunc(iw/2)*2:trunc(ih/2)*2";
-        var audio = includeAudioTrack
-            ? "-f lavfi -t " + durationSeconds.ToString(CultureInfo.InvariantCulture) + " -i anullsrc=channel_layout=mono:sample_rate=44100 -map 0:v:0 -map 1:a:0 -c:a aac -b:a 160k"
-            : "-an";
-        return $"-y -f lavfi -t {durationSeconds.ToString(CultureInfo.InvariantCulture)} -i color=c={style.SlateColor}:s=1920x1080 {audio} -vf {Quote(vf)} -c:v libx264 -preset {quality.Preset} -crf {quality.Crf.ToString(CultureInfo.InvariantCulture)} -pix_fmt yuv420p {Quote(outputPath)}";
+        var args = new List<string>
+        {
+            "-y",
+            "-f",
+            "lavfi",
+            "-t",
+            durationSeconds.ToString(CultureInfo.InvariantCulture),
+            "-i",
+            $"color=c={style.SlateColor}:s=1920x1080"
+        };
+        if (includeAudioTrack)
+        {
+            args.AddRange(new[]
+            {
+                "-f",
+                "lavfi",
+                "-t",
+                durationSeconds.ToString(CultureInfo.InvariantCulture),
+                "-i",
+                "anullsrc=channel_layout=mono:sample_rate=44100",
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "160k"
+            });
+        }
+        else
+        {
+            args.Add("-an");
+        }
+
+        args.AddRange(new[]
+        {
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-preset",
+            quality.Preset,
+            "-crf",
+            quality.Crf.ToString(CultureInfo.InvariantCulture),
+            "-pix_fmt",
+            "yuv420p",
+            outputPath
+        });
+        return args;
     }
 
     private static string BuildVideoFilter(string? bannerText, ComposeStyleProfile style)
@@ -406,8 +581,6 @@ public sealed class DesktopVideoComposeService
             .Replace("[", "\\[", StringComparison.Ordinal)
             .Replace("]", "\\]", StringComparison.Ordinal);
     }
-
-    private static string Quote(string value) => $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
 
     private static bool HasNarrationFile(DesktopComposeClip clip)
         => !string.IsNullOrWhiteSpace(clip.NarrationAudioPath) && File.Exists(clip.NarrationAudioPath);
@@ -668,7 +841,7 @@ public sealed class DesktopVideoComposeService
 
     private async Task<ComposeStageOutcome> RunFfmpegStageAsync(
         string ffmpegPath,
-        string arguments,
+        IReadOnlyList<string> arguments,
         string workingDirectory,
         string stageName,
         TimeSpan timeout,
@@ -678,7 +851,14 @@ public sealed class DesktopVideoComposeService
         try
         {
             await using var handle = await _processLauncher.StartProcessAsync(
-                new ProcessStartRequest(ffmpegPath, arguments, workingDirectory, timeout),
+                new ProcessStartRequest(
+                    ffmpegPath,
+                    string.Empty,
+                    workingDirectory,
+                    timeout,
+                    arguments,
+                    $"ffmpeg-compose-{stageName.Replace(' ', '-')}",
+                    Path.GetFileNameWithoutExtension(workingDirectory)),
                 cancellationToken);
             var execution = await handle.WaitAsync(cancellationToken);
             if (execution.Cancelled)

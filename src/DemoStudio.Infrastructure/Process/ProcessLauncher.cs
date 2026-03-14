@@ -4,6 +4,7 @@ using DemoStudio.Application.Abstractions.System;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
 
 public sealed class ProcessLauncher : IProcessLauncher
 {
@@ -24,10 +25,12 @@ public sealed class ProcessLauncher : IProcessLauncher
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var operationId = Guid.NewGuid().ToString("N");
+        var operationName = string.IsNullOrWhiteSpace(request.OperationName) ? "process-start" : request.OperationName;
+
         var startInfo = new ProcessStartInfo
         {
             FileName = request.FileName,
-            Arguments = request.Arguments,
             WorkingDirectory = request.WorkingDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -35,6 +38,21 @@ public sealed class ProcessLauncher : IProcessLauncher
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        ApplyArguments(startInfo, request.Arguments, request.ArgumentList);
+
+        using var scope = _logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["ProcessOperationId"] = operationId,
+            ["ProcessOperationName"] = operationName,
+            ["ProcessCorrelationId"] = request.CorrelationId,
+            ["ProcessFileName"] = request.FileName
+        });
+        _logger.LogInformation(
+            "Starting process {OperationName} ({OperationId}) for {FileName} in {WorkingDirectory}.",
+            operationName,
+            operationId,
+            request.FileName,
+            request.WorkingDirectory);
 
         var process = System.Diagnostics.Process.Start(startInfo);
         if (process is null)
@@ -42,7 +60,13 @@ public sealed class ProcessLauncher : IProcessLauncher
             throw new InvalidOperationException("Process failed to start.");
         }
 
-        return Task.FromResult<IProcessHandle>(new ProcessHandle(process, request.Timeout, _logger));
+        _logger.LogInformation(
+            "Process {OperationName} ({OperationId}) started with pid {ProcessId}.",
+            operationName,
+            operationId,
+            process.Id);
+
+        return Task.FromResult<IProcessHandle>(new ProcessHandle(process, request.Timeout, _logger, operationId, operationName, request.CorrelationId));
     }
 
     public async Task<ProcessLaunchResult> LaunchAsync(ProcessLaunchRequest request, CancellationToken cancellationToken = default)
@@ -50,7 +74,14 @@ public sealed class ProcessLauncher : IProcessLauncher
         try
         {
             await using var handle = await StartProcessAsync(
-                new ProcessStartRequest(request.FileName, request.Arguments, request.WorkingDirectory, DefaultTimeout),
+                new ProcessStartRequest(
+                    request.FileName,
+                    request.Arguments,
+                    request.WorkingDirectory,
+                    DefaultTimeout,
+                    request.ArgumentList,
+                    request.OperationName,
+                    request.CorrelationId),
                 cancellationToken);
 
             var execution = await handle.WaitAsync(cancellationToken);
@@ -81,16 +112,22 @@ public sealed class ProcessLauncher : IProcessLauncher
         private readonly TimeSpan? _timeout;
         private readonly SemaphoreSlim _sync = new(1, 1);
         private readonly ILogger _logger;
+        private readonly string _operationId;
+        private readonly string _operationName;
+        private readonly string? _correlationId;
 
         private ProcessExecutionResult? _cachedExecution;
         private bool _disposed;
 
-        public ProcessHandle(Process process, TimeSpan? timeout, ILogger logger)
+        public ProcessHandle(Process process, TimeSpan? timeout, ILogger logger, string operationId, string operationName, string? correlationId)
         {
             _process = process;
             _processId = process.Id;
             _timeout = timeout;
             _logger = logger;
+            _operationId = operationId;
+            _operationName = operationName;
+            _correlationId = correlationId;
             _stdOutTask = process.StandardOutput.ReadToEndAsync();
             _stdErrTask = process.StandardError.ReadToEndAsync();
         }
@@ -176,6 +213,7 @@ public sealed class ProcessLauncher : IProcessLauncher
 
                 var exitCode = _process.HasExited ? _process.ExitCode : -1;
                 _cachedExecution = new ProcessExecutionResult(exitCode, stdOut, stdErr, timedOut, cancelled);
+                LogCompletion(_cachedExecution);
                 return _cachedExecution;
             }
             finally
@@ -237,5 +275,86 @@ public sealed class ProcessLauncher : IProcessLauncher
             }
 
         }
+
+        private void LogCompletion(ProcessExecutionResult execution)
+        {
+            using var scope = _logger.BeginScope(new Dictionary<string, object?>
+            {
+                ["ProcessOperationId"] = _operationId,
+                ["ProcessOperationName"] = _operationName,
+                ["ProcessCorrelationId"] = _correlationId,
+                ["ProcessId"] = _processId
+            });
+
+            if (execution.Cancelled)
+            {
+                _logger.LogWarning(
+                    "Process {OperationName} ({OperationId}) was cancelled for pid {ProcessId}. stderr={StdErr}",
+                    _operationName,
+                    _operationId,
+                    _processId,
+                    SummarizeStream(execution.StdErr));
+                return;
+            }
+
+            if (execution.TimedOut)
+            {
+                _logger.LogWarning(
+                    "Process {OperationName} ({OperationId}) timed out for pid {ProcessId}. stderr={StdErr}",
+                    _operationName,
+                    _operationId,
+                    _processId,
+                    SummarizeStream(execution.StdErr));
+                return;
+            }
+
+            if (execution.ExitCode != 0)
+            {
+                _logger.LogWarning(
+                    "Process {OperationName} ({OperationId}) exited with code {ExitCode} for pid {ProcessId}. stderr={StdErr}",
+                    _operationName,
+                    _operationId,
+                    execution.ExitCode,
+                    _processId,
+                    SummarizeStream(execution.StdErr));
+                return;
+            }
+
+            _logger.LogInformation(
+                "Process {OperationName} ({OperationId}) completed successfully for pid {ProcessId}. stdout={StdOut}",
+                _operationName,
+                _operationId,
+                _processId,
+                SummarizeStream(execution.StdOut));
+        }
+
+        private static string SummarizeStream(string stream)
+        {
+            if (string.IsNullOrWhiteSpace(stream))
+            {
+                return string.Empty;
+            }
+
+            var flattened = stream
+                .Replace("\r", " ", StringComparison.Ordinal)
+                .Replace("\n", " ", StringComparison.Ordinal)
+                .Trim();
+            return flattened.Length <= 400 ? flattened : flattened[^400..];
+        }
+    }
+
+    private static void ApplyArguments(ProcessStartInfo startInfo, string arguments, IReadOnlyList<string>? argumentList)
+    {
+        if (argumentList is { Count: > 0 })
+        {
+            foreach (var argument in argumentList)
+            {
+                startInfo.ArgumentList.Add(argument ?? string.Empty);
+            }
+
+            return;
+        }
+
+        startInfo.Arguments = arguments;
     }
 }

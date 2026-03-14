@@ -1,19 +1,20 @@
 using System.IO;
+using DemoStudio.Application.Abstractions.System;
 
 namespace DemoStudio.Desktop.App.Services;
 
 public sealed class DesktopDependencyHealthService
 {
     private readonly DesktopCaptureRuntime _captureRuntime;
-    private readonly DesktopProcessRunner _processRunner;
+    private readonly IProcessLauncher _processLauncher;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private DesktopDependencyHealthSnapshot _current = DesktopDependencyHealthSnapshot.Uninitialized();
     private DateTimeOffset _ffmpegProbeMutedUntilUtc = DateTimeOffset.MinValue;
 
-    public DesktopDependencyHealthService(DesktopCaptureRuntime captureRuntime, DesktopProcessRunner processRunner)
+    public DesktopDependencyHealthService(DesktopCaptureRuntime captureRuntime, IProcessLauncher processLauncher)
     {
         _captureRuntime = captureRuntime ?? throw new ArgumentNullException(nameof(captureRuntime));
-        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
     }
 
     public DesktopDependencyHealthSnapshot Current => _current;
@@ -77,27 +78,28 @@ public sealed class DesktopDependencyHealthService
             return;
         }
 
-        var startInfo = new System.Diagnostics.ProcessStartInfo
+        var probe = await _processLauncher.LaunchAsync(
+            new ProcessLaunchRequest(
+                _captureRuntime.FfmpegPath,
+                string.Empty,
+                _captureRuntime.StorageRoot,
+                new[] { "-version" },
+                "ffmpeg-dependency-probe",
+                "dependency-health"),
+            cancellationToken);
+        var execution = probe.Execution;
+        if (!probe.Started || execution is null || execution.ExitCode != 0 || execution.TimedOut || execution.Cancelled)
         {
-            FileName = _captureRuntime.FfmpegPath,
-            Arguments = "-version",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true
-        };
-
-        var probe = await _processRunner.RunAsync(startInfo, TimeSpan.FromSeconds(3), cancellationToken);
-        if (!probe.Succeeded)
-        {
-            var reason = probe.StartFailed
-                ? probe.ErrorMessage ?? "start failure"
-                : probe.TimedOut
+            var reason = probe.ErrorMessage ?? "start failure";
+            if (probe.Started && execution is not null)
+            {
+                reason = execution.TimedOut
                     ? "timed out"
-                    : probe.Cancelled
+                    : execution.Cancelled
                         ? "cancelled"
-                        : $"exit code {probe.ExitCode}";
-            if (probe.StartFailed)
+                        : $"exit code {execution.ExitCode}";
+            }
+            if (!probe.Started)
             {
                 _ffmpegProbeMutedUntilUtc = now.AddSeconds(30);
             }

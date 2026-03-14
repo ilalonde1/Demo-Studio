@@ -156,11 +156,26 @@ public sealed class DemoExportService : IDemoExportService
             }
 
             var screenshotPath = Path.Combine(screenshotsDirectory, $"screenshot-{i + 1:D2}.png");
-            var arguments =
-                $"-y -i {Quote(exportVideoPath)} -ss {seconds.ToString("0.###", CultureInfo.InvariantCulture)} -frames:v 1 {Quote(screenshotPath)}";
+            var arguments = new[]
+            {
+                "-y",
+                "-i",
+                exportVideoPath,
+                "-ss",
+                seconds.ToString("0.###", CultureInfo.InvariantCulture),
+                "-frames:v",
+                "1",
+                screenshotPath
+            };
 
             var result = await _processLauncher.LaunchAsync(
-                new ProcessLaunchRequest(_ffmpegPath, arguments, screenshotsDirectory),
+                new ProcessLaunchRequest(
+                    _ffmpegPath,
+                    string.Empty,
+                    screenshotsDirectory,
+                    arguments,
+                    "ffmpeg-export-screenshot",
+                    Path.GetFileNameWithoutExtension(screenshotPath)),
                 cancellationToken);
 
             if (!result.Started || result.Execution?.ExitCode != 0)
@@ -203,16 +218,6 @@ public sealed class DemoExportService : IDemoExportService
         }
 
         return 0;
-    }
-
-    private static string Quote(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "\"\"";
-        }
-
-        return $"\"{value.Replace("\"", "\\\"")}\"";
     }
 
     internal sealed record DemoExportManifest(

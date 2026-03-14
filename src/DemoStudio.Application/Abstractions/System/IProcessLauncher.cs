@@ -11,9 +11,18 @@ public sealed record ProcessStartRequest(
     string FileName,
     string Arguments,
     string WorkingDirectory,
-    TimeSpan? Timeout = null);
+    TimeSpan? Timeout = null,
+    IReadOnlyList<string>? ArgumentList = null,
+    string? OperationName = null,
+    string? CorrelationId = null);
 
-public sealed record ProcessLaunchRequest(string FileName, string Arguments, string WorkingDirectory);
+public sealed record ProcessLaunchRequest(
+    string FileName,
+    string Arguments,
+    string WorkingDirectory,
+    IReadOnlyList<string>? ArgumentList = null,
+    string? OperationName = null,
+    string? CorrelationId = null);
 
 public sealed record ProcessExecutionResult(
     int ExitCode,

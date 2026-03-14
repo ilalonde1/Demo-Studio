@@ -59,12 +59,33 @@ public sealed class DesktopClipNarrationService
 
         foreach (var deviceName in devicesToTry)
         {
-            var safeDevice = deviceName.Replace("\"", "\\\"", StringComparison.Ordinal);
-            var safeOutput = outputPath.Replace("\"", "\\\"", StringComparison.Ordinal);
-            var args =
-                $"-y -f dshow -i audio=\"{safeDevice}\" -t {durationValue} -ac 1 -ar 44100 -c:a aac -b:a 128k \"{safeOutput}\"";
+            var arguments = new[]
+            {
+                "-y",
+                "-f",
+                "dshow",
+                "-i",
+                $"audio=\"{deviceName.Replace("\"", string.Empty, StringComparison.Ordinal)}\"",
+                "-t",
+                durationValue,
+                "-ac",
+                "1",
+                "-ar",
+                "44100",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                outputPath
+            };
             var run = await _processLauncher.LaunchAsync(
-                new ProcessLaunchRequest(ffmpegPath, args, directory),
+                new ProcessLaunchRequest(
+                    ffmpegPath,
+                    string.Empty,
+                    directory,
+                    arguments,
+                    "ffmpeg-narration-capture",
+                    Path.GetFileNameWithoutExtension(outputPath)),
                 cancellationToken);
 
             if (run.Started && run.Execution is not null && run.Execution.ExitCode == 0 && File.Exists(outputPath))

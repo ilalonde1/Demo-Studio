@@ -232,7 +232,7 @@ public sealed class CompositionAndDiagnosticsTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             LaunchCount++;
-            var output = ResolveOutputPath(request.Arguments);
+            var output = ResolveOutputPath(request.Arguments, request.ArgumentList);
             if (!string.IsNullOrWhiteSpace(output))
             {
                 var dir = Path.GetDirectoryName(output);
@@ -251,7 +251,7 @@ public sealed class CompositionAndDiagnosticsTests
         public Task<ProcessLaunchResult> LaunchAsync(ProcessLaunchRequest request, CancellationToken cancellationToken = default)
         {
             LaunchCount++;
-            var output = ResolveOutputPath(request.Arguments);
+            var output = ResolveOutputPath(request.Arguments, request.ArgumentList);
             if (!string.IsNullOrWhiteSpace(output))
             {
                 var dir = Path.GetDirectoryName(output);
@@ -270,8 +270,13 @@ public sealed class CompositionAndDiagnosticsTests
                 ErrorMessage: null));
         }
 
-        private static string? ResolveOutputPath(string arguments)
+        private static string? ResolveOutputPath(string arguments, IReadOnlyList<string>? argumentList)
         {
+            if (argumentList is { Count: > 0 })
+            {
+                return argumentList[^1];
+            }
+
             var match = LastQuoted.Match(arguments ?? string.Empty);
             return match.Success ? match.Groups[1].Value : null;
         }
