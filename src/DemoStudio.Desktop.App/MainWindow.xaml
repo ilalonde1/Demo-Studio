@@ -69,6 +69,25 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderBrush" Value="#9D2B2B" />
         </Style>
+        <Style x:Key="PrimaryCallToActionButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#0B63CE" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#084F9E" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="30,16" />
+            <Setter Property="MinWidth" Value="240" />
+        </Style>
+        <Style x:Key="NextActionButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ShouldHighlightExportTutorial}" Value="True">
+                    <Setter Property="Background" Value="#FFF3C8" />
+                    <Setter Property="BorderBrush" Value="#E8BF43" />
+                    <Setter Property="Foreground" Value="#7B5700" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <Style TargetType="TextBox">
             <Setter Property="Padding" Value="8,5" />
@@ -187,40 +206,76 @@
                 BorderBrush="#C5D7FC"
                 BorderThickness="1"
                 Background="#EEF4FF"
-                Visibility="Collapsed">
+                Visibility="{Binding ShowQuickStartHint, Converter={StaticResource BoolToVisibility}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Visibility="Collapsed">
+                <StackPanel>
                     <TextBlock FontWeight="SemiBold"
                                Foreground="#173C8E"
-                               Text="{Binding Onboarding.StepNumber, StringFormat=Quick Start ({0}/3)}" />
+                               Text="Quick Start" />
                     <TextBlock Margin="0,4,0,0"
                                FontSize="16"
                                FontWeight="SemiBold"
                                Foreground="#173C8E"
-                               Text="{Binding Onboarding.Title}" />
-                    <TextBlock Margin="0,4,0,0"
+                               Text="Create your first demo in four steps" />
+                    <TextBlock Margin="0,8,0,0"
                                Foreground="#2D4D93"
-                               TextWrapping="Wrap"
-                               Text="{Binding Onboarding.Detail}" />
+                               Text="1. Click &quot;Record Demo&quot;" />
+                    <TextBlock Margin="0,2,0,0"
+                               Foreground="#2D4D93"
+                               Text="2. Perform the workflow you want to demonstrate" />
+                    <TextBlock Margin="0,2,0,0"
+                               Foreground="#2D4D93"
+                               Text="3. Click &quot;Finish Recording&quot;" />
+                    <TextBlock Margin="0,2,0,0"
+                               Foreground="#2D4D93"
+                               Text="4. Export the tutorial" />
                 </StackPanel>
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <Button Content="Back"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            Command="{Binding Onboarding.PreviousCommand}" />
                     <Button Margin="8,0,0,0"
-                            Content="{Binding Onboarding.NextLabel}"
-                            Command="{Binding Onboarding.NextCommand}" />
-                    <Button Margin="8,0,0,0"
-                            Content="Skip"
+                            Content="Hide"
                             Style="{StaticResource SecondaryButtonStyle}"
                             Command="{Binding Onboarding.DismissCommand}" />
                 </StackPanel>
+            </Grid>
+        </Border>
+        <Border DockPanel.Dock="Bottom"
+                Margin="0,14,0,0"
+                CornerRadius="10"
+                Padding="12,10"
+                BorderBrush="{StaticResource BrushBorder}"
+                BorderThickness="1"
+                Background="#F8FAFF">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Padding="10,4"
+                        CornerRadius="999"
+                        Background="#E7F1FF"
+                        BorderBrush="#C4D8FF"
+                        BorderThickness="1">
+                    <TextBlock Foreground="#173C8E"
+                               FontWeight="SemiBold"
+                               Text="{Binding WorkflowStatusText}" />
+                </Border>
+                <TextBlock Grid.Column="1"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="#4D628F"
+                           Text="{Binding FriendlyRuntimeMessage}" />
+                <TextBlock Grid.Column="2"
+                           VerticalAlignment="Center"
+                           Foreground="#173C8E"
+                           FontWeight="SemiBold"
+                           Text="{Binding NextWorkflowHintText}" />
             </Grid>
         </Border>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -296,6 +351,43 @@
                                        Text="{Binding DurationText, StringFormat=Duration: {0}}" />
                         </Border>
                     </StackPanel>
+                    <Border Margin="0,16,0,0"
+                            Padding="18"
+                            CornerRadius="10"
+                            Background="#F7FAFF"
+                            BorderBrush="#D7E3FF"
+                            BorderThickness="1">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock HorizontalAlignment="Center"
+                                       FontSize="24"
+                                       FontWeight="SemiBold"
+                                       Foreground="#173C8E"
+                                       Text="Record a demo in one obvious flow" />
+                            <TextBlock Margin="0,6,0,0"
+                                       HorizontalAlignment="Center"
+                                       Foreground="#4D628F"
+                                       Text="{Binding NextWorkflowHintText}" />
+                            <StackPanel Margin="0,16,0,0"
+                                        HorizontalAlignment="Center"
+                                        Orientation="Horizontal">
+                                <Button Content="{Binding RecordDemoActionText}"
+                                        ToolTip="{Binding RecordDemoTooltip}"
+                                        Style="{StaticResource PrimaryCallToActionButtonStyle}"
+                                        Command="{Binding StartClipCommand}" />
+                                <Button Margin="12,0,0,0"
+                                        Content="Finish Recording"
+                                        Visibility="{Binding CanFinishRecordingAction, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="Finish recording and generate demo steps."
+                                        Style="{StaticResource DangerButtonStyle}"
+                                        Command="{Binding StopSessionCommand}" />
+                                <Button Margin="12,0,0,0"
+                                        Content="Export Tutorial"
+                                        ToolTip="Create a shareable step-by-step tutorial."
+                                        Style="{StaticResource NextActionButtonStyle}"
+                                        Command="{Binding CreatePublishPackageCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                     <Border Margin="0,10,0,0"
                             Padding="10"
                             CornerRadius="8"
@@ -359,7 +451,7 @@
                         Background="#EEF4FF"
                         BorderBrush="#BCD1FF"
                         BorderThickness="1"
-                        Visibility="Collapsed">
+                        Visibility="Visible">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -379,19 +471,23 @@
                                        FontSize="13"
                                        Foreground="#173C8E"
                                        Text="{Binding Workflow.GuidanceText}" />
-                            <TextBlock Margin="0,4,0,0"
-                                       FontSize="12"
-                                       Foreground="#2D4D93"
-                                       Text="Nothing auto-starts. Recording begins only when you click Start Clip." />
                         </StackPanel>
                         <StackPanel Grid.Column="1"
                                     Margin="16,0,0,0"
                                     VerticalAlignment="Center">
                             <Button MinWidth="170"
                                     Padding="16,8"
-                                    Content="{Binding Workflow.PrimaryWorkflowActionText}"
-                                    ToolTip="Primary action for this stage: Start, Pause/Resume, or Stop."
-                                    Command="{Binding PrimaryWorkflowCommand}" />
+                                    Content="{Binding RecordDemoActionText}"
+                                    ToolTip="{Binding RecordDemoTooltip}"
+                                    Style="{StaticResource PrimaryCallToActionButtonStyle}"
+                                    Command="{Binding StartClipCommand}" />
+                            <Button Margin="0,8,0,0"
+                                    MinWidth="170"
+                                    Content="Finish Recording"
+                                    Visibility="{Binding CanFinishRecordingAction, Converter={StaticResource BoolToVisibility}}"
+                                    ToolTip="Finish recording and generate demo steps."
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Command="{Binding StopSessionCommand}" />
                             <Button Margin="0,8,0,0"
                                     MinWidth="170"
                                     Content="Open Clip Editor"
@@ -399,8 +495,14 @@
                                     Command="{Binding OpenCurationCommand}" />
                             <Button Margin="0,8,0,0"
                                     MinWidth="170"
-                                    Content="Build Final Video"
+                                    Content="Generate Tutorial"
                                     Command="{Binding ComposeManifestCommand}" />
+                            <Button Margin="0,8,0,0"
+                                    MinWidth="170"
+                                    Content="Export Tutorial"
+                                    ToolTip="Create a shareable step-by-step tutorial."
+                                    Style="{StaticResource NextActionButtonStyle}"
+                                    Command="{Binding CreatePublishPackageCommand}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -420,7 +522,7 @@
                         <TextBlock VerticalAlignment="Center"
                                    Foreground="#173C8E"
                                    FontWeight="SemiBold"
-                                   Text="Next: adjust clip order, then build and export your final video." />
+                                   Text="Next: review the clips, generate the tutorial, then export the shareable package." />
                         <StackPanel Grid.Column="1"
                                     Orientation="Horizontal">
                             <TextBlock VerticalAlignment="Center"
@@ -435,14 +537,15 @@
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Command="{Binding OpenCurationCommand}" />
                             <Button Margin="8,0,0,0"
-                                    Content="Build Final Video"
+                                    Content="Generate Tutorial"
                                     Command="{Binding ComposeManifestCommand}" />
                             <Button Margin="8,0,0,0"
                                     Content="Open Output Folder"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Command="{Binding OpenLatestOutputFolderCommand}" />
                             <Button Margin="8,0,0,0"
-                                    Content="Publish Package"
+                                    Content="Export Tutorial"
+                                    ToolTip="Create a shareable step-by-step tutorial."
                                     Command="{Binding CreatePublishPackageCommand}" />
                         </StackPanel>
                     </Grid>
@@ -459,7 +562,7 @@
                             <TextBlock Style="{StaticResource SectionTitleStyle}"
                                        Text="What to Record" />
                             <TextBlock Style="{StaticResource SectionHintStyle}"
-                                       Text="Pick what to capture, then use Record Now from the Control Panel." />
+                                       Text="Choose what to capture, then click Record Demo to start." />
                             <Grid Margin="0,14,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="170" />
@@ -519,8 +622,8 @@
                                 <Button Grid.Row="1"
                                         Grid.Column="4"
                                         Margin="0,0,0,10"
-                                        Content="Open Stage"
-                                        ToolTip="Open or activate the Stage workspace window and lock capture to it."
+                                        Content="Stage Workspace"
+                                        ToolTip="Preview and interact with web pages during recording."
                                         Style="{StaticResource SecondaryButtonStyle}"
                                         Command="{Binding OpenStageWorkspaceCommand}" />
                             </Grid>
@@ -529,7 +632,7 @@
                                        Text="{Binding Targeting.WindowSelectionStatus}" />
                             <TextBlock Margin="0,8,0,0"
                                        Foreground="#4D628F"
-                                       Text="Tip: Focus target once, then use Control Panel hotkeys while demoing." />
+                                       Text="Tip: Focus the target once, then use Record Demo and Finish Recording as you walk through the flow." />
                             <StackPanel Margin="0,8,0,0"
                                         Orientation="Horizontal"
                                         Visibility="{Binding IsStageMode, Converter={StaticResource BoolToVisibility}}">
@@ -541,6 +644,7 @@
                                          Margin="0,0,8,0"
                                          Text="{Binding StageStartupUrl, UpdateSourceTrigger=PropertyChanged}" />
                                 <Button Content="Open Stage Workspace"
+                                        ToolTip="Preview and interact with web pages during recording."
                                         Style="{StaticResource SecondaryButtonStyle}"
                                         Command="{Binding OpenStageWorkspaceCommand}" />
                             </StackPanel>
@@ -575,11 +679,11 @@
                                     <TextBlock VerticalAlignment="Center"
                                                Foreground="#173C8E"
                                                FontWeight="SemiBold"
-                                               Text="{Binding LastRuntimeMessage}" />
+                                               Text="{Binding FriendlyRuntimeMessage}" />
                                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                                         <TextBlock VerticalAlignment="Center"
                                                    Foreground="#4D628F"
-                                                   Text="Control Panel: Ctrl+Shift+1 Start/Resume | Ctrl+Shift+2 Pause | Ctrl+Shift+3 Stop" />
+                                                   Text="Shortcuts: Ctrl+Shift+1 Record/Resume | Ctrl+Shift+2 Pause | Ctrl+Shift+3 Finish Recording" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -1018,10 +1122,11 @@
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Command="{Binding StartNewSessionCommand}" />
                                     <Button Margin="8,0,0,0"
-                                            Content="Build Final Video"
-                                            Command="{Binding ComposeManifestCommand}" />
+                                        Content="Generate Tutorial"
+                                        Command="{Binding ComposeManifestCommand}" />
                                 <Button Margin="8,0,0,0"
-                                        Content="Publish Package"
+                                        Content="Export Tutorial"
+                                        ToolTip="Create a shareable step-by-step tutorial."
                                         Command="{Binding CreatePublishPackageCommand}" />
                             </StackPanel>
                             <Expander Margin="0,14,0,0"
@@ -1148,10 +1253,11 @@
                                                   ItemsSource="{Binding Production.ExportStylePresets}"
                                                   SelectedItem="{Binding Production.SelectedExportStyle, UpdateSourceTrigger=PropertyChanged}" />
                                         <Button Margin="8,0,0,0"
-                                                Content="Build Final Video"
+                                                Content="Generate Tutorial"
                                                 Command="{Binding ComposeManifestCommand}" />
                                         <Button Margin="8,0,0,0"
-                                                Content="Publish Package"
+                                                Content="Export Tutorial"
+                                                ToolTip="Create a shareable step-by-step tutorial."
                                                 Command="{Binding CreatePublishPackageCommand}" />
                                         <Button Margin="8,0,0,0"
                                                 Content="Record Narration"

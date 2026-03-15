@@ -203,6 +203,13 @@ public sealed partial class MainWindowViewModel
                     }));
             _snapshot = result.Snapshot;
             _lastRuntimeMessage = result.RuntimeMessage;
+            if (_snapshot.State == RecorderSessionState.Completed && _snapshot.ClipCount > 0)
+            {
+                _onboarding.Dismiss();
+                _lastRuntimeMessage = CanCreatePublishPackage
+                    ? "Recording finished. Click Export Tutorial to create a shareable walkthrough."
+                    : "Recording finished. Review the captured clips, then generate and export your tutorial.";
+            }
             if (result.ShouldRaiseWorkflowState)
             {
                 RaiseWorkflowAndClipState();

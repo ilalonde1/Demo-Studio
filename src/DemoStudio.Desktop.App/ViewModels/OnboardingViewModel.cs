@@ -27,16 +27,16 @@ public sealed class OnboardingViewModel : INotifyPropertyChanged
 
     public string Title => _stepIndex switch
     {
-        0 => "Step 1: Pick the right target",
-        1 => "Step 2: Record in clean clip segments",
-        _ => "Step 3: Curate, compose, publish"
+        0 => "Step 1: Choose what to record",
+        1 => "Step 2: Record the workflow",
+        _ => "Step 3: Export the tutorial"
     };
 
     public string Detail => _stepIndex switch
     {
-        0 => "Choose Record Type and Target Window.",
-        1 => "Click Start Recording. Use Pause/Resume to create clear segment boundaries.",
-        _ => "Use Open Clip Editor to reorder clips, Build Final Video, then create your package."
+        0 => "Pick Window, Stage Workspace, or Desktop capture and make sure the right target is selected.",
+        1 => "Click Record Demo, perform the workflow, then click Finish Recording when you are done.",
+        _ => "Review the captured clips, generate the tutorial, and export a shareable walkthrough."
     };
 
     public string NextLabel => _stepIndex >= 2 ? "Finish" : "Next";

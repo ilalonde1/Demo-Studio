@@ -110,39 +110,39 @@ public sealed class WorkflowStateViewModel : INotifyPropertyChanged
     {
         GuidanceText = state switch
         {
-            RecorderSessionState.Armed => "Prepare target UI, then click Record Now to lock/focus/start in one action.",
-            RecorderSessionState.Recording => "Recording in progress. Pause Clip to create a boundary.",
-            RecorderSessionState.Paused => "Capture paused. Start Clip to resume with a new segment.",
-            RecorderSessionState.Completed => "Session completed.",
-            RecorderSessionState.Failed => $"Session failed: {failureReason}",
+            RecorderSessionState.Armed => "Choose what to capture, then click Record Demo to begin.",
+            RecorderSessionState.Recording => "Recording in progress. Use Pause Recording to split clips or Finish Recording when you are done.",
+            RecorderSessionState.Paused => "Recording paused. Click Record Demo to resume or Finish Recording to create your tutorial steps.",
+            RecorderSessionState.Completed => "Recording finished. Generate your tutorial video, then export the tutorial package.",
+            RecorderSessionState.Failed => $"Recording needs attention: {failureReason}",
             _ => "Unknown state."
         };
 
         WorkflowStepTitle = state switch
         {
-            RecorderSessionState.Armed => "Step 1: Lock target and start first clip",
-            RecorderSessionState.Recording => "Step 2: Demonstrate feature flow",
-            RecorderSessionState.Paused => "Step 3: Label next clip and resume",
-            RecorderSessionState.Completed => "Step 4: Build and export final video",
-            RecorderSessionState.Failed => "Step 4: Inspect failure code and diagnostics, then retry",
+            RecorderSessionState.Armed => "Step 1: Get ready to record",
+            RecorderSessionState.Recording => "Step 2: Demonstrate the workflow",
+            RecorderSessionState.Paused => "Step 3: Resume or finish recording",
+            RecorderSessionState.Completed => "Step 4: Export your tutorial",
+            RecorderSessionState.Failed => "Step 4: Resolve the issue and try again",
             _ => "Workflow"
         };
 
         WorkflowStepDetail = state switch
         {
-            RecorderSessionState.Armed => "Select capture target, then click the primary button to auto-lock target and begin capture.",
-            RecorderSessionState.Recording => "Perform your demo actions. Use primary button to pause and create clip boundaries.",
-            RecorderSessionState.Paused => "Update next clip label if needed, then use primary button to resume a new segment.",
-            RecorderSessionState.Completed => "Reorder clips, add banners, and click Build Final Video.",
-            RecorderSessionState.Failed => "Open diagnostics from session history, resolve issue, then start a new session.",
+            RecorderSessionState.Armed => "Select the app, page, or screen you want to demonstrate, then start recording.",
+            RecorderSessionState.Recording => "Perform the workflow naturally. Pause recording if you want separate clip segments.",
+            RecorderSessionState.Paused => "Adjust the next clip title if needed, then resume recording or finish the session.",
+            RecorderSessionState.Completed => "Review clips, generate the tutorial output, and export a shareable package.",
+            RecorderSessionState.Failed => "Check the message shown in the app, fix the setup, then start a new recording.",
             _ => "Workflow guidance unavailable."
         };
 
         PrimaryWorkflowActionText = state switch
         {
-            RecorderSessionState.Armed => "Record Now",
-            RecorderSessionState.Recording => "Pause Clip",
-            RecorderSessionState.Paused => "Resume Clip",
+            RecorderSessionState.Armed => "Record Demo",
+            RecorderSessionState.Recording => "Pause Recording",
+            RecorderSessionState.Paused => "Resume Recording",
             _ => "No Primary Action"
         };
 

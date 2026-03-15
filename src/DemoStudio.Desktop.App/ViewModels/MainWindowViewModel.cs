@@ -416,6 +416,19 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     public string LastOutputPath => _lastOutputPath;
 
     public string LastRuntimeMessage => _lastRuntimeMessage;
+    public string FriendlyRuntimeMessage => BuildFriendlyRuntimeMessage();
+    public string WorkflowStatusText => BuildWorkflowStatusText();
+    public string RecordDemoActionText => _snapshot.State == RecorderSessionState.Paused ? "Resume Recording" : "Record Demo";
+    public string RecordDemoTooltip => _snapshot.State == RecorderSessionState.Paused
+        ? "Resume recording and capture the next part of your workflow."
+        : "Start recording a workflow to automatically generate tutorials and documentation.";
+    public bool ShowQuickStartHint => IsOnboardingVisible;
+    public bool CanFinishRecordingAction => _captureSession.IsStartClipInFlight || (!_isBusy && _snapshot.State is RecorderSessionState.Recording or RecorderSessionState.Paused);
+    public bool ShouldHighlightExportTutorial
+        => !_isBusy
+            && (_snapshot.State == RecorderSessionState.Completed || (_snapshot.State == RecorderSessionState.Armed && CurrentSessionClips.Count > 0))
+            && (CanComposeManifest || CanCreatePublishPackage);
+    public string NextWorkflowHintText => BuildNextWorkflowHintText();
 
     public string PerformanceSummary => _healthMonitor.PerformanceSummary;
     public string MemoryWorkingSetText => _healthMonitor.MemoryWorkingSetText;
@@ -983,6 +996,12 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(WorkflowStepDetail));
         OnPropertyChanged(nameof(PrimaryWorkflowActionText));
         OnPropertyChanged(nameof(CanExecutePrimaryWorkflow));
+        OnPropertyChanged(nameof(RecordDemoActionText));
+        OnPropertyChanged(nameof(RecordDemoTooltip));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(CanEditTargetSettings));
         OnPropertyChanged(nameof(CanUseSelectedWindow));
         OnPropertyChanged(nameof(CanOpenStageWorkspace));
@@ -1055,6 +1074,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(OnboardingNextLabel));
         OnPropertyChanged(nameof(CanPreviousOnboardingStep));
         OnPropertyChanged(nameof(CanNextOnboardingStep));
+        OnPropertyChanged(nameof(ShowQuickStartHint));
         RaiseCommandState();
     }
 
@@ -1075,6 +1095,13 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanExecutePrimaryWorkflow));
         OnPropertyChanged(nameof(LastOutputPath));
         OnPropertyChanged(nameof(LastRuntimeMessage));
+        OnPropertyChanged(nameof(FriendlyRuntimeMessage));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(RecordDemoActionText));
+        OnPropertyChanged(nameof(RecordDemoTooltip));
+        OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(PerformanceSummary));
         OnPropertyChanged(nameof(MemoryWorkingSetText));
         OnPropertyChanged(nameof(MemoryPrivateText));
@@ -1195,6 +1222,13 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanExecutePrimaryWorkflow));
         OnPropertyChanged(nameof(LastOutputPath));
         OnPropertyChanged(nameof(LastRuntimeMessage));
+        OnPropertyChanged(nameof(FriendlyRuntimeMessage));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(RecordDemoActionText));
+        OnPropertyChanged(nameof(RecordDemoTooltip));
+        OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(CurrentSessionClips));
         OnPropertyChanged(nameof(SelectedCurrentSessionClip));
         OnPropertyChanged(nameof(CanMoveSelectedClipUp));
@@ -1252,6 +1286,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(PreflightStatus));
         OnPropertyChanged(nameof(ReadinessLastChecked));
         OnPropertyChanged(nameof(LastRuntimeMessage));
+        OnPropertyChanged(nameof(FriendlyRuntimeMessage));
+        OnPropertyChanged(nameof(WorkflowStatusText));
         OnPropertyChanged(nameof(CanSaveLaunchProfile));
         OnPropertyChanged(nameof(CanDeleteLaunchProfile));
         OnPropertyChanged(nameof(CanLoadLaunchProfile));
@@ -1279,6 +1315,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanCopyShareSummary));
         OnPropertyChanged(nameof(CanOpenPublishZip));
         OnPropertyChanged(nameof(CanOpenComposeHealth));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(AiNarrationProvider));
         OnPropertyChanged(nameof(AiNarrationBaseUrl));
         OnPropertyChanged(nameof(AiNarrationModel));
@@ -1303,6 +1342,10 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanPlayNarration));
         OnPropertyChanged(nameof(CanGenerateAiNarration));
         OnPropertyChanged(nameof(CanClearNarration));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(ShowQuickStartHint));
+        OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
         RaiseCommandState();
     }
 
@@ -1315,6 +1358,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(OnboardingNextLabel));
         OnPropertyChanged(nameof(CanPreviousOnboardingStep));
         OnPropertyChanged(nameof(CanNextOnboardingStep));
+        OnPropertyChanged(nameof(ShowQuickStartHint));
+        OnPropertyChanged(nameof(WorkflowStatusText));
         RaiseCommandState();
     }
     private void RaiseCommandState()
@@ -1327,6 +1372,82 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
+    private string BuildWorkflowStatusText()
+    {
+        if (_isBusy)
+        {
+            return _captureSession.IsStartClipInFlight ? "Preparing recording" : "Working";
+        }
+
+        return _snapshot.State switch
+        {
+            RecorderSessionState.Recording => "Recording demo",
+            RecorderSessionState.Paused => "Recording paused",
+            RecorderSessionState.Completed when CanCreatePublishPackage => "Tutorial ready",
+            RecorderSessionState.Completed => "Generating tutorial",
+            RecorderSessionState.Failed => "Action needs attention",
+            _ when CurrentSessionClips.Count > 0 && CanComposeManifest => "Ready to generate tutorial",
+            _ when CurrentSessionClips.Count > 0 => "Recording finished",
+            _ => "Ready to record"
+        };
+    }
+
+    private string BuildNextWorkflowHintText()
+    {
+        if (ShouldHighlightExportTutorial && CanCreatePublishPackage)
+        {
+            return "Next: click Export Tutorial to create a shareable walkthrough.";
+        }
+
+        if (!_isBusy && CanComposeManifest)
+        {
+            return "Next: click Generate Tutorial to build the walkthrough assets.";
+        }
+
+        if (CanFinishRecordingAction)
+        {
+            return "Next: finish recording when the workflow is complete.";
+        }
+
+        if (CanStartClip)
+        {
+            return "Next: click Record Demo to start capturing your workflow.";
+        }
+
+        return "Select a target window, Stage Workspace, or desktop capture to begin.";
+    }
+
+    private string BuildFriendlyRuntimeMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_lastRuntimeMessage))
+        {
+            return WorkflowStatusText;
+        }
+
+        if (_lastRuntimeMessage.Contains("Start clip failed", StringComparison.OrdinalIgnoreCase)
+            || _lastRuntimeMessage.Contains("Capture start failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Recording could not start. Please ensure a window is selected, or choose Stage Workspace or Desktop capture.";
+        }
+
+        if (_lastRuntimeMessage.Contains("Target readiness check failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "The selected target is not ready to record. Refresh the window list or choose another target.";
+        }
+
+        if (_lastRuntimeMessage.Contains("Launch failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "The selected app could not be launched. Check the launch path and try again.";
+        }
+
+        if (_lastRuntimeMessage.Contains("Stop session failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Recording could not finish cleanly. Try finishing the recording again.";
+        }
+
+        return _lastRuntimeMessage;
+    }
+
     private string BuildFailureDisplay(string code, string summary, string? detail = null)
         => _statusCoordinator.BuildFailureDisplay(code, summary, detail);
 
@@ -1334,6 +1455,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     {
         _lastRuntimeMessage = _statusCoordinator.CreateRuntimeFailureMessage(code, summary, exception);
         OnPropertyChanged(nameof(LastRuntimeMessage));
+        OnPropertyChanged(nameof(FriendlyRuntimeMessage));
+        OnPropertyChanged(nameof(WorkflowStatusText));
     }
 
     private async Task ReportBackgroundFailureAsync(string code, string summary, Exception ex, TimeSpan minInterval)
@@ -1438,6 +1561,12 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(WorkflowStepDetail));
         OnPropertyChanged(nameof(PrimaryWorkflowActionText));
         OnPropertyChanged(nameof(CanExecutePrimaryWorkflow));
+        OnPropertyChanged(nameof(RecordDemoActionText));
+        OnPropertyChanged(nameof(RecordDemoTooltip));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(Step1Background));
         OnPropertyChanged(nameof(Step2Background));
         OnPropertyChanged(nameof(Step3Background));
@@ -1461,6 +1590,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanCloseSession));
         OnPropertyChanged(nameof(CanStartNewSession));
         OnPropertyChanged(nameof(CanOpenComposeHealth));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
         RaiseCommandState();
     }
 
