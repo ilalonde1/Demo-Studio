@@ -14,6 +14,7 @@ namespace DemoStudio.Desktop.App;
 public partial class RecorderHudWindow : Window, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _snapTimer;
+    private readonly RecorderHudFeedbackState _feedbackState = new();
     private HwndSource? _hwndSource;
     private bool _manualPositionOverride;
     private bool _isApplyingSnapPosition;
@@ -136,6 +137,7 @@ public partial class RecorderHudWindow : Window, INotifyPropertyChanged
     public void PrepareForRecordingSession()
     {
         _manualPositionOverride = false;
+        _feedbackState.ResetSession();
         SnapToTargetIfAvailable();
     }
 
@@ -292,7 +294,7 @@ public partial class RecorderHudWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        ShowStepCapturedIndicator("Step captured");
+        ShowStepCapturedIndicator(_feedbackState.RegisterStepCapture());
     }
 
     private void ShowStepCapturedIndicator(string text)

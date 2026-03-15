@@ -97,6 +97,21 @@ public sealed class RecorderHudExperienceTests
         Assert.DoesNotContain("_lastBrowserInteractionsWriteTicks", fields);
     }
 
+    [Fact]
+    public void RecorderHudFeedbackState_IncrementsAndResetsStepCount()
+    {
+        var state = new RecorderHudFeedbackState();
+
+        Assert.Equal("Step captured  (Step 1)", state.RegisterStepCapture());
+        Assert.Equal("Step captured  (Step 2)", state.RegisterStepCapture());
+        Assert.Equal(2, state.CurrentStepNumber);
+
+        state.ResetSession();
+
+        Assert.Equal(0, state.CurrentStepNumber);
+        Assert.Equal("Step captured  (Step 1)", state.RegisterStepCapture());
+    }
+
     private static string CreateRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "demostudio-hud-tests", Guid.NewGuid().ToString("N"));
