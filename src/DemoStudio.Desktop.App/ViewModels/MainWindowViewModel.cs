@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows;
 using System.Windows.Threading;
 using DemoStudio.Desktop.App.Services;
+using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.Core.Sessions;
 using Microsoft.Extensions.Logging;
 
@@ -30,6 +31,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly IDesktopSessionHistoryUseCase _sessionHistoryUseCase;
     private readonly IDesktopShellIntegrationUseCase _shellIntegrationUseCase;
     private readonly IDesktopFailureDiagnosticsUseCase _failureDiagnosticsUseCase;
+    private readonly ITimelineMarkerWriter _timelineMarkerWriter;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly MainWindowStatusCoordinator _statusCoordinator;
     private readonly HealthMonitorViewModel _healthMonitor;
@@ -110,6 +112,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         IDesktopSessionHistoryUseCase sessionHistoryUseCase,
         IDesktopShellIntegrationUseCase shellIntegrationUseCase,
         IDesktopFailureDiagnosticsUseCase failureDiagnosticsUseCase,
+        ITimelineMarkerWriter timelineMarkerWriter,
         ILogger<MainWindowViewModel> logger,
         HealthMonitorViewModel healthMonitor,
         PublishWorkflowViewModel publishWorkflow,
@@ -132,6 +135,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _sessionHistoryUseCase = sessionHistoryUseCase ?? throw new ArgumentNullException(nameof(sessionHistoryUseCase));
         _shellIntegrationUseCase = shellIntegrationUseCase ?? throw new ArgumentNullException(nameof(shellIntegrationUseCase));
         _failureDiagnosticsUseCase = failureDiagnosticsUseCase ?? throw new ArgumentNullException(nameof(failureDiagnosticsUseCase));
+        _timelineMarkerWriter = timelineMarkerWriter ?? throw new ArgumentNullException(nameof(timelineMarkerWriter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _statusCoordinator = new MainWindowStatusCoordinator(_logger, BuildFixHint);
         _healthMonitor = healthMonitor ?? throw new ArgumentNullException(nameof(healthMonitor));
@@ -261,6 +265,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         MoveClipDownCommand = new RelayCommand(_ => MoveSelectedClipDown(), _ => CanMoveSelectedClipDown);
         ComposeManifestCommand = new RelayCommand(_ => ComposeVideoAsync(), _ => CanComposeManifest);
         PrimaryWorkflowCommand = new RelayCommand(_ => ExecutePrimaryWorkflowAsync(), _ => CanExecutePrimaryWorkflow);
+        AddMarkerCommand = new RelayCommand(_ => AddMarkerAsync(), _ => CanAddMarker);
         OpenCurationCommand = new RelayCommand(_ => ExpandClipCuration(), _ => CanOpenCuration);
         OpenLatestOutputFolderCommand = new RelayCommand(_ => OpenLatestOutputFolder(), _ => CanOpenLatestOutputFolder);
         CreatePublishPackageCommand = new RelayCommand(_ => CreatePublishPackageAsync(), _ => CanCreatePublishPackage);
@@ -305,6 +310,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             MoveClipDownCommand,
             ComposeManifestCommand,
             PrimaryWorkflowCommand,
+            AddMarkerCommand,
             OpenCurationCommand,
             OpenLatestOutputFolderCommand,
             CreatePublishPackageCommand,
@@ -368,6 +374,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     public ICommand ComposeManifestCommand { get; private set; } = null!;
 
     public ICommand PrimaryWorkflowCommand { get; private set; } = null!;
+    public ICommand AddMarkerCommand { get; private set; } = null!;
 
     public ICommand OpenCurationCommand { get; private set; } = null!;
 
@@ -424,6 +431,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         : "Start recording a workflow to automatically generate tutorials and documentation.";
     public bool ShowQuickStartHint => IsOnboardingVisible;
     public bool CanFinishRecordingAction => _captureSession.IsStartClipInFlight || (!_isBusy && _snapshot.State is RecorderSessionState.Recording or RecorderSessionState.Paused);
+    public bool ShouldShowRecorderHud => _snapshot.State is RecorderSessionState.Recording or RecorderSessionState.Paused;
+    public bool CanAddMarker => !_isBusy && _snapshot.State is RecorderSessionState.Recording or RecorderSessionState.Paused;
+    public string HudRecordActionText => _snapshot.State == RecorderSessionState.Paused ? "Resume" : "Record";
     public bool ShouldHighlightExportTutorial
         => !_isBusy
             && (_snapshot.State == RecorderSessionState.Completed || (_snapshot.State == RecorderSessionState.Armed && CurrentSessionClips.Count > 0))
@@ -1000,6 +1010,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(RecordDemoTooltip));
         OnPropertyChanged(nameof(WorkflowStatusText));
         OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldShowRecorderHud));
+        OnPropertyChanged(nameof(CanAddMarker));
+        OnPropertyChanged(nameof(HudRecordActionText));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
         OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(CanEditTargetSettings));
@@ -1100,6 +1113,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(RecordDemoActionText));
         OnPropertyChanged(nameof(RecordDemoTooltip));
         OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldShowRecorderHud));
+        OnPropertyChanged(nameof(CanAddMarker));
+        OnPropertyChanged(nameof(HudRecordActionText));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
         OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(PerformanceSummary));
@@ -1227,6 +1243,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(RecordDemoActionText));
         OnPropertyChanged(nameof(RecordDemoTooltip));
         OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldShowRecorderHud));
+        OnPropertyChanged(nameof(CanAddMarker));
+        OnPropertyChanged(nameof(HudRecordActionText));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
         OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(CurrentSessionClips));
@@ -1317,6 +1336,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanOpenComposeHealth));
         OnPropertyChanged(nameof(WorkflowStatusText));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
+        OnPropertyChanged(nameof(CanAddMarker));
         OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(AiNarrationProvider));
         OnPropertyChanged(nameof(AiNarrationBaseUrl));
@@ -1344,6 +1364,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanClearNarration));
         OnPropertyChanged(nameof(WorkflowStatusText));
         OnPropertyChanged(nameof(ShowQuickStartHint));
+        OnPropertyChanged(nameof(ShouldShowRecorderHud));
+        OnPropertyChanged(nameof(CanAddMarker));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
         OnPropertyChanged(nameof(NextWorkflowHintText));
         RaiseCommandState();
@@ -1360,6 +1382,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanNextOnboardingStep));
         OnPropertyChanged(nameof(ShowQuickStartHint));
         OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(ShouldShowRecorderHud));
         RaiseCommandState();
     }
     private void RaiseCommandState()
@@ -1565,6 +1588,9 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(RecordDemoTooltip));
         OnPropertyChanged(nameof(WorkflowStatusText));
         OnPropertyChanged(nameof(CanFinishRecordingAction));
+        OnPropertyChanged(nameof(ShouldShowRecorderHud));
+        OnPropertyChanged(nameof(CanAddMarker));
+        OnPropertyChanged(nameof(HudRecordActionText));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
         OnPropertyChanged(nameof(NextWorkflowHintText));
         OnPropertyChanged(nameof(Step1Background));
@@ -1591,6 +1617,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(CanStartNewSession));
         OnPropertyChanged(nameof(CanOpenComposeHealth));
         OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(ShouldShowRecorderHud));
+        OnPropertyChanged(nameof(CanAddMarker));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
         OnPropertyChanged(nameof(NextWorkflowHintText));
         RaiseCommandState();

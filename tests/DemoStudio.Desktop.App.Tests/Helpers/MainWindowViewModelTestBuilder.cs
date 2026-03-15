@@ -8,6 +8,7 @@ using DemoStudio.Desktop.Core.Time;
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Infrastructure.Execution;
 using DemoStudio.Infrastructure.Options;
+using DemoStudio.Infrastructure.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests.Helpers;
@@ -44,6 +45,7 @@ internal static class MainWindowViewModelTestBuilder
         var windowFocusService = new DesktopWindowFocusService(windowLocator);
         var sessionHistoryService = new DesktopSessionHistoryService(root, NullLogger<DesktopSessionHistoryService>.Instance);
         var diagnosticsBundleService = new DesktopDiagnosticsBundleService(root, NullLogger<DesktopDiagnosticsBundleService>.Instance);
+        var timelineMarkerWriter = new TimelineMarkerWriter(new LocalFileStorage(root));
         var ffmpegOperationQueue = new DesktopFfmpegOperationQueue();
         var targetingUseCase = new DesktopTargetingUseCase(
             new DesktopWindowCatalogService(),
@@ -114,6 +116,7 @@ internal static class MainWindowViewModelTestBuilder
             sessionHistoryUseCase: sessionHistoryUseCase,
             shellIntegrationUseCase: shellIntegrationUseCase,
             failureDiagnosticsUseCase: failureDiagnosticsUseCase,
+            timelineMarkerWriter: timelineMarkerWriter,
             logger: NullLogger<MainWindowViewModel>.Instance,
             healthMonitor: healthMonitorViewModel,
             publishWorkflow: publishWorkflowViewModel,

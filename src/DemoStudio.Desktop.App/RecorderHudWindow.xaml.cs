@@ -3,16 +3,19 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using System.Windows.Interop;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using DemoStudio.Desktop.App.ViewModels;
 
 namespace DemoStudio.Desktop.App;
 
-public partial class RecorderHudWindow : Window
+public partial class RecorderHudWindow : Window, INotifyPropertyChanged
 {
     private readonly DispatcherTimer _snapTimer;
     private HwndSource? _hwndSource;
     private bool _manualPositionOverride;
     private bool _isApplyingSnapPosition;
+    private bool _isCompactMode = true;
     private const int HotkeyIdStartResume = 1001;
     private const int HotkeyIdPause = 1002;
     private const int HotkeyIdStop = 1003;
@@ -26,6 +29,7 @@ public partial class RecorderHudWindow : Window
     public RecorderHudWindow()
     {
         InitializeComponent();
+        ToggleCompactModeCommand = new RelayCommand(_ => ToggleCompactMode());
         Loaded += OnLoaded;
         MouseLeftButtonDown += OnMouseLeftButtonDown;
         LocationChanged += OnLocationChanged;
@@ -36,8 +40,33 @@ public partial class RecorderHudWindow : Window
         _snapTimer.Tick += (_, _) => SnapToTargetIfAvailable();
     }
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public ICommand ToggleCompactModeCommand { get; }
+
+    public bool IsCompactMode
+    {
+        get => _isCompactMode;
+        private set
+        {
+            if (_isCompactMode == value)
+            {
+                return;
+            }
+
+            _isCompactMode = value;
+            ApplyModeSize();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ToggleModeButtonText));
+            SnapToTargetIfAvailable();
+        }
+    }
+
+    public string ToggleModeButtonText => IsCompactMode ? "Expand" : "Compact";
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyModeSize();
         SnapToTargetIfAvailable();
         _snapTimer.Start();
         RegisterGlobalHotkeys();
@@ -73,6 +102,35 @@ public partial class RecorderHudWindow : Window
         _manualPositionOverride = true;
     }
 
+    public void PrepareForRecordingSession()
+    {
+        _manualPositionOverride = false;
+        SnapToTargetIfAvailable();
+    }
+
+    public void RefreshHudPosition()
+    {
+        SnapToTargetIfAvailable();
+    }
+
+    private void ToggleCompactMode()
+    {
+        IsCompactMode = !IsCompactMode;
+    }
+
+    private void ApplyModeSize()
+    {
+        if (IsCompactMode)
+        {
+            Width = 340;
+            Height = 110;
+            return;
+        }
+
+        Width = 560;
+        Height = 205;
+    }
+
     private void SnapToTargetIfAvailable()
     {
         if (_manualPositionOverride)
@@ -101,18 +159,25 @@ public partial class RecorderHudWindow : Window
             return;
         }
 
-        var targetTop = rect.Top + 12;
-        var targetLeft = rect.Right - Width - 12;
         var workArea = SystemParameters.WorkArea;
-        ApplySnapPosition(
-            Math.Max(workArea.Left + 8, Math.Min(targetLeft, workArea.Right - Width - 8)),
-            Math.Max(workArea.Top + 8, Math.Min(targetTop, workArea.Bottom - Height - 8)));
+        var targetRect = new Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+        var position = FindBestHudPosition(targetRect, workArea);
+        ApplySnapPosition(position.Left, position.Top);
     }
 
     private void SnapToWorkArea()
     {
         var workArea = SystemParameters.WorkArea;
-        ApplySnapPosition(workArea.Right - Width - 16, workArea.Bottom - Height - 16);
+        var cursorRect = GetCursorSafetyRect();
+        var bottomRight = ClampToWorkArea(workArea.Right - Width - 16, workArea.Bottom - Height - 16, workArea);
+        if (bottomRight.IntersectsWith(cursorRect))
+        {
+            var topRight = ClampToWorkArea(workArea.Right - Width - 16, workArea.Top + 16, workArea);
+            ApplySnapPosition(topRight.Left, topRight.Top);
+            return;
+        }
+
+        ApplySnapPosition(bottomRight.Left, bottomRight.Top);
     }
 
     private void ApplySnapPosition(double left, double top)
@@ -127,6 +192,60 @@ public partial class RecorderHudWindow : Window
         {
             _isApplyingSnapPosition = false;
         }
+    }
+
+    private Rect FindBestHudPosition(Rect targetRect, Rect workArea)
+    {
+        var candidates = new[]
+        {
+            ClampToWorkArea(targetRect.Right - Width - 12, targetRect.Top + 12, workArea),
+            ClampToWorkArea(targetRect.Right - Width - 12, targetRect.Bottom - Height - 12, workArea),
+            ClampToWorkArea(targetRect.Left + 12, targetRect.Top + 12, workArea),
+            ClampToWorkArea(targetRect.Left + 12, targetRect.Bottom - Height - 12, workArea),
+            ClampToWorkArea(workArea.Right - Width - 16, workArea.Bottom - Height - 16, workArea)
+        };
+
+        var cursorRect = GetCursorSafetyRect();
+        var centerRect = new Rect(
+            targetRect.Left + (targetRect.Width * 0.25d),
+            targetRect.Top + (targetRect.Height * 0.25d),
+            Math.Max(64d, targetRect.Width * 0.5d),
+            Math.Max(64d, targetRect.Height * 0.5d));
+
+        foreach (var candidate in candidates)
+        {
+            if (!candidate.IntersectsWith(cursorRect) && !candidate.IntersectsWith(centerRect))
+            {
+                return candidate;
+            }
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!candidate.IntersectsWith(cursorRect))
+            {
+                return candidate;
+            }
+        }
+
+        return candidates[0];
+    }
+
+    private Rect ClampToWorkArea(double left, double top, Rect workArea)
+    {
+        var clampedLeft = Math.Max(workArea.Left + 8, Math.Min(left, workArea.Right - Width - 8));
+        var clampedTop = Math.Max(workArea.Top + 8, Math.Min(top, workArea.Bottom - Height - 8));
+        return new Rect(clampedLeft, clampedTop, Width, Height);
+    }
+
+    private static Rect GetCursorSafetyRect()
+    {
+        if (!GetCursorPos(out var point))
+        {
+            return Rect.Empty;
+        }
+
+        return new Rect(point.X - 48, point.Y - 48, 96, 96);
     }
 
     private void RegisterGlobalHotkeys()
@@ -178,9 +297,9 @@ public partial class RecorderHudWindow : Window
         switch (hotkeyId)
         {
             case HotkeyIdStartResume:
-                if (vm.PrimaryWorkflowCommand.CanExecute(null))
+                if (vm.StartClipCommand.CanExecute(null))
                 {
-                    vm.PrimaryWorkflowCommand.Execute(null);
+                    vm.StartClipCommand.Execute(null);
                 }
                 break;
             case HotkeyIdPause:
@@ -226,6 +345,9 @@ public partial class RecorderHudWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
@@ -239,5 +361,17 @@ public partial class RecorderHudWindow : Window
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
