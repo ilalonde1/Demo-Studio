@@ -212,6 +212,7 @@ internal static class DesktopCompositionRoot
                 sp.GetRequiredService<ILogger<DesktopDemoStepSynthesizer>>());
         });
         services.AddSingleton<DesktopDemoNarrationGenerator>();
+        services.AddSingleton<DesktopDemoExplanationGenerator>();
         services.AddSingleton<DesktopTutorialExporter>();
         services.AddSingleton<DesktopComposeManifestService>();
         services.AddSingleton<DesktopVideoComposeService>();
