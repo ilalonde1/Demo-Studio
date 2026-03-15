@@ -56,4 +56,16 @@ public static class DesktopStoragePaths
     /// <summary>Returns the publish output directory.</summary>
     public static string GetPublishDirectory(string storageRoot) =>
         Path.Combine(storageRoot, "publish");
+
+    /// <summary>Returns the browser interaction root directory.</summary>
+    public static string GetBrowserInteractionsDirectory(string storageRoot) =>
+        Path.Combine(storageRoot, "browser-interactions");
+
+    /// <summary>Returns the browser interaction event log path.</summary>
+    public static string GetBrowserInteractionsLogPath(string storageRoot) =>
+        Path.Combine(GetBrowserInteractionsDirectory(storageRoot), "stage-browser-events.jsonl");
+
+    /// <summary>Returns the browser interaction screenshot directory.</summary>
+    public static string GetBrowserInteractionScreenshotsDirectory(string storageRoot) =>
+        Path.Combine(GetBrowserInteractionsDirectory(storageRoot), "screenshots");
 }

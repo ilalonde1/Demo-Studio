@@ -197,6 +197,13 @@ internal static class DesktopCompositionRoot
         services.AddSingleton<DesktopCapturePreflightService>();
         services.AddSingleton<DesktopWindowFocusService>();
         services.AddSingleton<DesktopPerformanceMetricsService>();
+        services.AddSingleton<DesktopBrowserInteractionRecorder>(sp =>
+        {
+            var paths = sp.GetRequiredService<DesktopRuntimePaths>();
+            return new DesktopBrowserInteractionRecorder(
+                paths.StorageRoot,
+                sp.GetRequiredService<ILogger<DesktopBrowserInteractionRecorder>>());
+        });
         services.AddSingleton<DesktopComposeManifestService>();
         services.AddSingleton<DesktopVideoComposeService>();
         services.AddSingleton<DesktopFfmpegOperationQueue>();

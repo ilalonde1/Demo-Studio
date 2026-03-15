@@ -15,6 +15,11 @@ public partial class App : System.Windows.Application
 
     internal DesktopRuntimeLogService? RuntimeLog => _runtimeLog;
 
+    internal T? GetService<T>() where T : class
+    {
+        return _serviceProvider?.GetService<T>();
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
