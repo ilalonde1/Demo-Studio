@@ -29,6 +29,7 @@ public sealed partial class MainWindowViewModel
                 DateTimeOffset.UtcNow,
                 _lifecycleCancellation.Token);
 
+            _feedbackNotifier.NotifyStepCaptured("marker");
             _lastRuntimeMessage = "Step marker added to the current recording.";
             OnPropertyChanged(nameof(LastRuntimeMessage));
             OnPropertyChanged(nameof(FriendlyRuntimeMessage));

@@ -192,6 +192,7 @@ internal static class DesktopCompositionRoot
         services.AddSingleton<DesktopCaptureWatchdogCoordinator>();
         services.AddSingleton<DesktopClipCurationCoordinator>();
         services.AddSingleton<DesktopDependencyHealthService>();
+        services.AddSingleton<IRecorderFeedbackNotifier, RecorderFeedbackNotifier>();
         services.AddSingleton<DesktopWindowCatalogService>();
         services.AddSingleton<DesktopTargetLauncher>();
         services.AddSingleton<DesktopCapturePreflightService>();
@@ -202,7 +203,8 @@ internal static class DesktopCompositionRoot
             var paths = sp.GetRequiredService<DesktopRuntimePaths>();
             return new DesktopBrowserInteractionRecorder(
                 paths.StorageRoot,
-                sp.GetRequiredService<ILogger<DesktopBrowserInteractionRecorder>>());
+                sp.GetRequiredService<ILogger<DesktopBrowserInteractionRecorder>>(),
+                sp.GetRequiredService<IRecorderFeedbackNotifier>());
         });
         services.AddSingleton<DesktopDemoStepSynthesizer>(sp =>
         {

@@ -1,4 +1,5 @@
 using System.Reflection;
+using DemoStudio.Desktop.App;
 using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.Tests.Helpers;
 using DemoStudio.Desktop.App.ViewModels;
@@ -46,6 +47,17 @@ public sealed class RecorderHudExperienceTests
         try
         {
             var viewModel = MainWindowViewModelTestBuilder.CreateMinimal(root);
+            var notifier = (RecorderFeedbackNotifier)typeof(MainWindowViewModel)
+                .GetField("_feedbackNotifier", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(viewModel)!;
+            var notifications = 0;
+            notifier.StepCaptured += (_, args) =>
+            {
+                if (args.Source == "marker")
+                {
+                    notifications++;
+                }
+            };
             var recordingDirectory = Path.Combine(root, "recording-session");
             Directory.CreateDirectory(recordingDirectory);
             var rawVideoPath = Path.Combine(recordingDirectory, "capture.mp4");
@@ -64,11 +76,25 @@ public sealed class RecorderHudExperienceTests
             Assert.True(File.Exists(timelinePath));
             var timeline = File.ReadAllText(timelinePath);
             Assert.Contains("UserStepMarker", timeline, StringComparison.Ordinal);
+            Assert.Equal(1, notifications);
         }
         finally
         {
             Directory.Delete(root, true);
         }
+    }
+
+    [Fact]
+    public void RecorderHudWindow_NoLongerContainsPollingFeedbackFields()
+    {
+        var fields = typeof(RecorderHudWindow)
+            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Select(field => field.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("_feedbackPollTimer", fields);
+        Assert.DoesNotContain("_lastTimelinePath", fields);
+        Assert.DoesNotContain("_lastBrowserInteractionsWriteTicks", fields);
     }
 
     private static string CreateRoot()

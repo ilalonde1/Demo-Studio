@@ -125,7 +125,8 @@ public partial class App : System.Windows.Application
         _hudWindow = new RecorderHudWindow
         {
             DataContext = viewModel,
-            Owner = _mainWindow
+            Owner = _mainWindow,
+            FeedbackNotifier = _serviceProvider?.GetRequiredService<IRecorderFeedbackNotifier>()
         };
     }
 

@@ -13,7 +13,17 @@ public sealed class DesktopBrowserInteractionRecorderTests
 
         try
         {
-            var recorder = new DesktopBrowserInteractionRecorder(root, NullLogger<DesktopBrowserInteractionRecorder>.Instance);
+            var notifier = new RecorderFeedbackNotifier();
+            var notifications = 0;
+            notifier.StepCaptured += (_, args) =>
+            {
+                if (args.Source == "browser-interaction")
+                {
+                    notifications++;
+                }
+            };
+
+            var recorder = new DesktopBrowserInteractionRecorder(root, NullLogger<DesktopBrowserInteractionRecorder>.Instance, notifier);
             var browserEvent = new BrowserInteractionEvent(
                 EventType: BrowserInteractionEventTypes.BrowserClick,
                 Selector: "#searchBox",
@@ -32,6 +42,7 @@ public sealed class DesktopBrowserInteractionRecorderTests
             Assert.Equal("#searchBox", document.RootElement.GetProperty("selector").GetString());
             Assert.Equal("https://www.bing.com/", document.RootElement.GetProperty("url").GetString());
             Assert.Equal(browserEvent.ScreenshotPath, document.RootElement.GetProperty("screenshotPath").GetString());
+            Assert.Equal(1, notifications);
         }
         finally
         {
@@ -46,7 +57,7 @@ public sealed class DesktopBrowserInteractionRecorderTests
 
         try
         {
-            var recorder = new DesktopBrowserInteractionRecorder(root, NullLogger<DesktopBrowserInteractionRecorder>.Instance);
+            var recorder = new DesktopBrowserInteractionRecorder(root, NullLogger<DesktopBrowserInteractionRecorder>.Instance, new RecorderFeedbackNotifier());
 
             var path = recorder.CreateScreenshotPath(BrowserInteractionEventTypes.BrowserNavigate, DateTimeOffset.Parse("2026-03-14T12:00:00Z"));
 

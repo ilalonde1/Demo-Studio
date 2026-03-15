@@ -46,6 +46,7 @@ internal static class MainWindowViewModelTestBuilder
         var sessionHistoryService = new DesktopSessionHistoryService(root, NullLogger<DesktopSessionHistoryService>.Instance);
         var diagnosticsBundleService = new DesktopDiagnosticsBundleService(root, NullLogger<DesktopDiagnosticsBundleService>.Instance);
         var timelineMarkerWriter = new TimelineMarkerWriter(new LocalFileStorage(root));
+        var feedbackNotifier = new RecorderFeedbackNotifier();
         var ffmpegOperationQueue = new DesktopFfmpegOperationQueue();
         var targetingUseCase = new DesktopTargetingUseCase(
             new DesktopWindowCatalogService(),
@@ -117,6 +118,7 @@ internal static class MainWindowViewModelTestBuilder
             shellIntegrationUseCase: shellIntegrationUseCase,
             failureDiagnosticsUseCase: failureDiagnosticsUseCase,
             timelineMarkerWriter: timelineMarkerWriter,
+            feedbackNotifier: feedbackNotifier,
             logger: NullLogger<MainWindowViewModel>.Instance,
             healthMonitor: healthMonitorViewModel,
             publishWorkflow: publishWorkflowViewModel,

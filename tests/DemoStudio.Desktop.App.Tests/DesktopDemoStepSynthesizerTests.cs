@@ -12,7 +12,7 @@ public sealed class DesktopDemoStepSynthesizerTests
 
         try
         {
-            var recorder = new DesktopBrowserInteractionRecorder(root, NullLogger<DesktopBrowserInteractionRecorder>.Instance);
+            var recorder = new DesktopBrowserInteractionRecorder(root, NullLogger<DesktopBrowserInteractionRecorder>.Instance, new RecorderFeedbackNotifier());
             var synthesizer = new DesktopDemoStepSynthesizer(root, NullLogger<DesktopDemoStepSynthesizer>.Instance);
 
             await recorder.RecordAsync(new BrowserInteractionEvent(

@@ -3,8 +3,10 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using System.Windows.Interop;
+using System.Windows.Media.Animation;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using DemoStudio.Desktop.App.Services;
 using DemoStudio.Desktop.App.ViewModels;
 
 namespace DemoStudio.Desktop.App;
@@ -16,6 +18,7 @@ public partial class RecorderHudWindow : Window, INotifyPropertyChanged
     private bool _manualPositionOverride;
     private bool _isApplyingSnapPosition;
     private bool _isCompactMode = true;
+    private IRecorderFeedbackNotifier? _feedbackNotifier;
     private const int HotkeyIdStartResume = 1001;
     private const int HotkeyIdPause = 1002;
     private const int HotkeyIdStop = 1003;
@@ -43,6 +46,30 @@ public partial class RecorderHudWindow : Window, INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ICommand ToggleCompactModeCommand { get; }
+
+    public IRecorderFeedbackNotifier? FeedbackNotifier
+    {
+        get => _feedbackNotifier;
+        set
+        {
+            if (ReferenceEquals(_feedbackNotifier, value))
+            {
+                return;
+            }
+
+            if (_feedbackNotifier is not null)
+            {
+                _feedbackNotifier.StepCaptured -= OnStepCaptured;
+            }
+
+            _feedbackNotifier = value;
+
+            if (_feedbackNotifier is not null)
+            {
+                _feedbackNotifier.StepCaptured += OnStepCaptured;
+            }
+        }
+    }
 
     public bool IsCompactMode
     {
@@ -76,6 +103,10 @@ public partial class RecorderHudWindow : Window, INotifyPropertyChanged
     {
         UnregisterGlobalHotkeys();
         _snapTimer.Stop();
+        if (_feedbackNotifier is not null)
+        {
+            _feedbackNotifier.StepCaptured -= OnStepCaptured;
+        }
         base.OnClosed(e);
     }
 
@@ -246,6 +277,40 @@ public partial class RecorderHudWindow : Window, INotifyPropertyChanged
         }
 
         return new Rect(point.X - 48, point.Y - 48, 96, 96);
+    }
+
+    private void OnStepCaptured(object? sender, RecorderFeedbackEventArgs e)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(() => OnStepCaptured(sender, e));
+            return;
+        }
+
+        if (!IsVisible || DataContext is not MainWindowViewModel vm || !vm.ShouldShowRecorderHud)
+        {
+            return;
+        }
+
+        ShowStepCapturedIndicator("Step captured");
+    }
+
+    private void ShowStepCapturedIndicator(string text)
+    {
+        StepCapturedIndicatorText.Text = text;
+        StepCapturedIndicator.Visibility = Visibility.Visible;
+        StepCapturedIndicator.BeginAnimation(OpacityProperty, null);
+
+        var animation = new DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromSeconds(1.5)
+        };
+        animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(0d, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        animation.KeyFrames.Add(new LinearDoubleKeyFrame(1d, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(140))));
+        animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(1d, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100))));
+        animation.KeyFrames.Add(new LinearDoubleKeyFrame(0d, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1500))));
+        animation.Completed += (_, _) => StepCapturedIndicator.Visibility = Visibility.Collapsed;
+        StepCapturedIndicator.BeginAnimation(OpacityProperty, animation);
     }
 
     private void RegisterGlobalHotkeys()

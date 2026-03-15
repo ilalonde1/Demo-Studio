@@ -17,8 +17,9 @@ public sealed class DesktopBrowserInteractionRecorder
     private readonly string _screenshotsRoot;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly ILogger<DesktopBrowserInteractionRecorder> _logger;
+    private readonly IRecorderFeedbackNotifier _feedbackNotifier;
 
-    public DesktopBrowserInteractionRecorder(string storageRoot, ILogger<DesktopBrowserInteractionRecorder> logger)
+    public DesktopBrowserInteractionRecorder(string storageRoot, ILogger<DesktopBrowserInteractionRecorder> logger, IRecorderFeedbackNotifier feedbackNotifier)
     {
         if (string.IsNullOrWhiteSpace(storageRoot))
         {
@@ -30,6 +31,7 @@ public sealed class DesktopBrowserInteractionRecorder
         Directory.CreateDirectory(Path.GetDirectoryName(_eventsPath)!);
         Directory.CreateDirectory(_screenshotsRoot);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _feedbackNotifier = feedbackNotifier ?? throw new ArgumentNullException(nameof(feedbackNotifier));
     }
 
     public string EventsPath => _eventsPath;
@@ -73,6 +75,7 @@ public sealed class DesktopBrowserInteractionRecorder
             effectiveEvent.Url,
             effectiveEvent.Selector,
             effectiveEvent.StatusCode);
+        _feedbackNotifier.NotifyStepCaptured("browser-interaction");
     }
 
     private static string NormalizeEventType(string? eventType)

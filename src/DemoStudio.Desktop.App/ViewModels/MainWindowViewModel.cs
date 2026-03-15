@@ -32,6 +32,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private readonly IDesktopShellIntegrationUseCase _shellIntegrationUseCase;
     private readonly IDesktopFailureDiagnosticsUseCase _failureDiagnosticsUseCase;
     private readonly ITimelineMarkerWriter _timelineMarkerWriter;
+    private readonly IRecorderFeedbackNotifier _feedbackNotifier;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly MainWindowStatusCoordinator _statusCoordinator;
     private readonly HealthMonitorViewModel _healthMonitor;
@@ -113,6 +114,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         IDesktopShellIntegrationUseCase shellIntegrationUseCase,
         IDesktopFailureDiagnosticsUseCase failureDiagnosticsUseCase,
         ITimelineMarkerWriter timelineMarkerWriter,
+        IRecorderFeedbackNotifier feedbackNotifier,
         ILogger<MainWindowViewModel> logger,
         HealthMonitorViewModel healthMonitor,
         PublishWorkflowViewModel publishWorkflow,
@@ -136,6 +138,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         _shellIntegrationUseCase = shellIntegrationUseCase ?? throw new ArgumentNullException(nameof(shellIntegrationUseCase));
         _failureDiagnosticsUseCase = failureDiagnosticsUseCase ?? throw new ArgumentNullException(nameof(failureDiagnosticsUseCase));
         _timelineMarkerWriter = timelineMarkerWriter ?? throw new ArgumentNullException(nameof(timelineMarkerWriter));
+        _feedbackNotifier = feedbackNotifier ?? throw new ArgumentNullException(nameof(feedbackNotifier));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _statusCoordinator = new MainWindowStatusCoordinator(_logger, BuildFixHint);
         _healthMonitor = healthMonitor ?? throw new ArgumentNullException(nameof(healthMonitor));

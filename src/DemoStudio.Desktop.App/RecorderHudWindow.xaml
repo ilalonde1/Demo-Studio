@@ -55,6 +55,24 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+            <Border x:Name="StepCapturedIndicator"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,-4,0,0"
+                    Padding="8,4"
+                    CornerRadius="999"
+                    BorderBrush="#B8E0C5"
+                    BorderThickness="1"
+                    Background="#ECFAF1"
+                    Opacity="0"
+                    Visibility="Collapsed"
+                    Panel.ZIndex="5">
+                <TextBlock x:Name="StepCapturedIndicatorText"
+                           Foreground="#216A43"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Text="Step captured" />
+            </Border>
 
             <Grid>
                 <Grid.ColumnDefinitions>
