@@ -69,7 +69,7 @@
                     Panel.ZIndex="5">
                 <TextBlock x:Name="StepCapturedIndicatorText"
                            Foreground="#216A43"
-                           FontSize="11"
+                           FontSize="12"
                            FontWeight="SemiBold"
                            Text="Step captured" />
             </Border>

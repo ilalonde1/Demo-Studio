@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using DemoStudio.Application.Abstractions.System;
 using DemoStudio.Desktop.App.Services;
+using DemoStudio.Desktop.App.Infrastructure;
+using DemoStudio.Desktop.App.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DemoStudio.Desktop.App.Tests;
@@ -214,6 +216,101 @@ public sealed class CompositionAndDiagnosticsTests
             Assert.True(result.Succeeded, result.Message);
             Assert.NotNull(result.PackagePath);
             Assert.True(File.Exists(result.PackagePath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PublishWorkflowViewModel_CreatesTutorialHtml_AndSurfacesFinalPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-app-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var video = Path.Combine(root, "final.mp4");
+        await File.WriteAllTextAsync(video, "video");
+        var interactionsPath = DesktopStoragePaths.GetBrowserInteractionsLogPath(root);
+        Directory.CreateDirectory(Path.GetDirectoryName(interactionsPath)!);
+        var browserEvent = new BrowserInteractionEvent(
+            BrowserInteractionEventTypes.BrowserNavigate,
+            null,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            "https://example.com/login");
+        await File.WriteAllTextAsync(interactionsPath, System.Text.Json.JsonSerializer.Serialize(browserEvent) + Environment.NewLine);
+
+        try
+        {
+            var launcher = new FakeProcessLauncher();
+            var captureRuntime = new DesktopCaptureRuntime(
+                new DesktopRecorderOptions
+                {
+                    StorageRoot = root,
+                    Capture = new DemoStudio.Infrastructure.Options.FfmpegCaptureOptions
+                    {
+                        FfmpegPath = "ffmpeg"
+                    }
+                },
+                launcher,
+                new DesktopVideoCaptureServiceFactory(launcher, NullLogger<DemoStudio.Infrastructure.Execution.FfmpegVideoCaptureService>.Instance),
+                new DesktopWindowLocator());
+
+            var useCase = new DesktopPublishWorkflowUseCase(
+                new DesktopPublishPackageService(launcher),
+                new DesktopFfmpegOperationQueue(),
+                captureRuntime,
+                NullLogger<DesktopPublishWorkflowUseCase>.Instance);
+
+            var packageOnlyResult = await useCase.CreateAsync(
+                new DesktopPublishWorkflowRequest(
+                    Guid.NewGuid(),
+                    video,
+                    "Balanced",
+                    "Portfolio Clean",
+                    Array.Empty<DemoStudio.Desktop.App.ViewModels.CurrentSessionClipItem>(),
+                    Array.Empty<DesktopSessionRecord>(),
+                    null),
+                CancellationToken.None);
+
+            Assert.True(packageOnlyResult.Succeeded, packageOnlyResult.RuntimeMessage);
+            Assert.False(string.IsNullOrWhiteSpace(packageOnlyResult.PackageDirectoryPath));
+            Assert.False(File.Exists(DesktopStoragePaths.GetTutorialHtmlPath(packageOnlyResult.PackageDirectoryPath!)));
+
+            var publishViewModel = new PublishWorkflowViewModel(
+                useCase,
+                new DesktopShellIntegrationUseCase(new DesktopProcessRunner(NullLogger<DesktopProcessRunner>.Instance)),
+                new DesktopDemoStepSynthesizer(root, NullLogger<DesktopDemoStepSynthesizer>.Instance),
+                new DesktopDemoNarrationGenerator(NullLogger<DesktopDemoNarrationGenerator>.Instance),
+                new DesktopTutorialExporter(NullLogger<DesktopTutorialExporter>.Instance),
+                NullLogger<PublishWorkflowViewModel>.Instance);
+            var production = new ProductionWorkspaceViewModel();
+            publishViewModel.AttachProductionWorkspace(production);
+
+            var sessionId = Guid.NewGuid();
+            await publishViewModel.CreatePublishPackageAsync(
+                new DesktopPublishWorkflowRequest(
+                    sessionId,
+                    video,
+                    "Balanced",
+                    "Portfolio Clean",
+                    Array.Empty<DemoStudio.Desktop.App.ViewModels.CurrentSessionClipItem>(),
+                    Array.Empty<DesktopSessionRecord>(),
+                    null),
+                CancellationToken.None,
+                _ => { },
+                _ => { },
+                _ => { },
+                (_, summary, detail) => $"{summary} {detail}".Trim());
+
+            Assert.False(string.IsNullOrWhiteSpace(production.LastPublishPackagePath));
+            Assert.False(string.IsNullOrWhiteSpace(production.LastTutorialHtmlPath));
+            Assert.True(File.Exists(production.LastTutorialHtmlPath));
+            Assert.Equal("tutorial.html", Path.GetFileName(production.LastTutorialHtmlPath));
         }
         finally
         {

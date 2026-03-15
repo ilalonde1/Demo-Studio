@@ -207,8 +207,8 @@ public sealed partial class MainWindowViewModel
             {
                 _onboarding.Dismiss();
                 _lastRuntimeMessage = CanCreatePublishPackage
-                    ? "Recording finished. Click Export Tutorial to create a shareable walkthrough."
-                    : "Recording finished. Review the captured clips, then generate and export your tutorial.";
+                    ? "Recording complete. You can now export your tutorial."
+                    : "Recording complete. Review the captured clips, then generate your tutorial.";
             }
             if (result.ShouldRaiseWorkflowState)
             {

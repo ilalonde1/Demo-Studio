@@ -54,7 +54,7 @@ public sealed class FfmpegOperationQueueTests
             async _ =>
             {
                 await gate.Task;
-                return DesktopPublishPackageResult.Success("pkg-1.zip");
+                return DesktopPublishPackageResult.Success("pkg-1.zip", "pkg-1");
             });
 
         await Task.Delay(50);
@@ -64,7 +64,7 @@ public sealed class FfmpegOperationQueueTests
             async _ =>
             {
                 await Task.Delay(10);
-                return DesktopPublishPackageResult.Success("pkg-2.zip");
+                return DesktopPublishPackageResult.Success("pkg-2.zip", "pkg-2");
             });
 
         await Task.Delay(50);
@@ -74,7 +74,7 @@ public sealed class FfmpegOperationQueueTests
             async _ =>
             {
                 await Task.Delay(10);
-                return DesktopPublishPackageResult.Success("pkg-3.zip");
+                return DesktopPublishPackageResult.Success("pkg-3.zip", "pkg-3");
             });
 
         gate.SetResult();

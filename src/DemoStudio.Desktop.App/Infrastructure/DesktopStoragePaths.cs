@@ -57,6 +57,13 @@ public static class DesktopStoragePaths
     public static string GetPublishDirectory(string storageRoot) =>
         Path.Combine(storageRoot, "publish");
 
+    /// <summary>Returns the final tutorial html path for a publish package directory.</summary>
+    public static string GetTutorialHtmlPath(string publishPackageDirectory) =>
+        Path.Combine(
+            publishPackageDirectory
+                ?? throw new ArgumentNullException(nameof(publishPackageDirectory)),
+            "tutorial.html");
+
     /// <summary>Returns the browser interaction root directory.</summary>
     public static string GetBrowserInteractionsDirectory(string storageRoot) =>
         Path.Combine(storageRoot, "browser-interactions");

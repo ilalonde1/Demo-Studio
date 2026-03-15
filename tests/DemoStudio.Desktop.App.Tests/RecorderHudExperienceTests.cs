@@ -102,14 +102,44 @@ public sealed class RecorderHudExperienceTests
     {
         var state = new RecorderHudFeedbackState();
 
-        Assert.Equal("Step captured  (Step 1)", state.RegisterStepCapture());
-        Assert.Equal("Step captured  (Step 2)", state.RegisterStepCapture());
+        Assert.Equal("Step 1 captured", state.RegisterStepCapture());
+        Assert.Equal("Step 2 captured", state.RegisterStepCapture());
         Assert.Equal(2, state.CurrentStepNumber);
 
         state.ResetSession();
 
         Assert.Equal(0, state.CurrentStepNumber);
-        Assert.Equal("Step captured  (Step 1)", state.RegisterStepCapture());
+        Assert.Equal("Step 1 captured", state.RegisterStepCapture());
+    }
+
+    [Fact]
+    public void RecorderHud_TitleAndNoiseFilter_UseConsistentName()
+    {
+        var solutionRoot = FindSolutionRoot();
+        var hudXamlPath = Path.Combine(solutionRoot, "src", "DemoStudio.Desktop.App", "RecorderHudWindow.xaml");
+        var windowCatalogPath = Path.Combine(solutionRoot, "src", "DemoStudio.Desktop.App", "Services", "DesktopWindowCatalogService.cs");
+
+        var hudXaml = File.ReadAllText(hudXamlPath);
+        var windowCatalog = File.ReadAllText(windowCatalogPath);
+
+        Assert.Contains("Title=\"Recorder HUD\"", hudXaml, StringComparison.Ordinal);
+        Assert.Contains("Recorder HUD", windowCatalog, StringComparison.Ordinal);
+    }
+
+    private static string FindSolutionRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "DemoStudio.Desktop.sln")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
     }
 
     private static string CreateRoot()

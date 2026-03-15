@@ -88,6 +88,8 @@ public interface IDesktopSessionHistoryUseCase
 public interface IDesktopShellIntegrationUseCase
 {
     DesktopShellOpenResult RevealPath(string path);
+
+    DesktopShellOpenResult OpenPath(string path);
 }
 
 public interface IDesktopFailureDiagnosticsUseCase
@@ -139,6 +141,7 @@ public sealed record DesktopPublishWorkflowResult(
     string SessionHistoryStatus,
     string PublishStatus,
     string? PackagePath,
+    string? PackageDirectoryPath,
     string? ShareSummary);
 
 public sealed class DesktopRuntimeInitializationUseCase : IDesktopRuntimeInitializationUseCase
@@ -406,7 +409,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
                 await request.RefreshSessionHistoryAsync();
                 return new DesktopCaptureStopResult(
                     resetSnapshot,
-                    $"{failedSnapshot.FailureReason} Open Clip Editor to review clips and build final video.",
+                    $"{failedSnapshot.FailureReason} Open Review Clips to inspect the captured workflow.",
                     true);
             }
 
@@ -426,7 +429,7 @@ public sealed class DesktopCaptureSessionUseCase : IDesktopCaptureSessionUseCase
             await request.RefreshSessionHistoryAsync();
             return new DesktopCaptureStopResult(
                 finalSnapshot,
-                "Capture process stopped. Open Clip Editor to reorder clips and build your final video.",
+                "Recording complete. Review the captured clips, then generate your tutorial.",
                 true);
         }
         catch (Exception ex)
@@ -867,6 +870,27 @@ public sealed class DesktopShellIntegrationUseCase : IDesktopShellIntegrationUse
 
         return new DesktopShellOpenResult(false, "Path was not found on disk.");
     }
+
+    public DesktopShellOpenResult OpenPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return new DesktopShellOpenResult(false, "Path is required.");
+        }
+
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return new DesktopShellOpenResult(false, "Path was not found on disk.");
+        }
+
+        var result = _processRunner.StartDetached(new ProcessStartInfo
+        {
+            FileName = path,
+            UseShellExecute = true
+        });
+
+        return new DesktopShellOpenResult(result.Succeeded, result.Succeeded ? "Opened path." : result.ErrorMessage ?? "Open path failed.");
+    }
 }
 
 public sealed class DesktopFailureDiagnosticsUseCase : IDesktopFailureDiagnosticsUseCase
@@ -957,7 +981,7 @@ public sealed class DesktopPublishWorkflowUseCase : IDesktopPublishWorkflowUseCa
                 ? "Publish package skipped: render queue is full."
                 : queuedPublish.Message;
             _logger.LogWarning("Publish workflow rejected: {Message}", rejection);
-            return new DesktopPublishWorkflowResult(false, rejection, rejection, rejection, null, null);
+            return new DesktopPublishWorkflowResult(false, rejection, rejection, rejection, null, null, null);
         }
 
         var result = queuedPublish.Value;
@@ -967,13 +991,18 @@ public sealed class DesktopPublishWorkflowUseCase : IDesktopPublishWorkflowUseCa
         var shareSummary = result.Succeeded && !string.IsNullOrWhiteSpace(result.PackagePath)
             ? $"Demo package ready: {Path.GetFileName(result.PackagePath)}"
             : null;
-        _logger.LogInformation("Publish workflow completed. Success={Succeeded} PackagePath={PackagePath}", result.Succeeded, result.PackagePath);
+        _logger.LogInformation(
+            "Publish workflow completed. Success={Succeeded} PackagePath={PackagePath} PackageDirectoryPath={PackageDirectoryPath}",
+            result.Succeeded,
+            result.PackagePath,
+            result.PackageDirectoryPath);
         return new DesktopPublishWorkflowResult(
             result.Succeeded,
             runtimeMessage,
             result.Message,
             result.Message,
             result.PackagePath,
+            result.PackageDirectoryPath,
             shareSummary);
     }
 

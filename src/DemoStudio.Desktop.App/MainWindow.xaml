@@ -139,6 +139,13 @@
             <Setter Property="Foreground" Value="#4D628F" />
             <Setter Property="FontSize" Value="13" />
         </Style>
+        <Style x:Key="SubtlePanelStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="Background" Value="#F7FAFF" />
+            <Setter Property="BorderBrush" Value="#D7E3FF" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </Window.Resources>
     <Window.InputBindings>
@@ -270,11 +277,14 @@
                            Margin="12,0,0,0"
                            VerticalAlignment="Center"
                            Foreground="#4D628F"
+                           TextWrapping="Wrap"
                            Text="{Binding FriendlyRuntimeMessage}" />
                 <TextBlock Grid.Column="2"
+                           Margin="16,0,0,0"
                            VerticalAlignment="Center"
                            Foreground="#173C8E"
                            FontWeight="SemiBold"
+                           TextWrapping="Wrap"
                            Text="{Binding NextWorkflowHintText}" />
             </Grid>
         </Border>
@@ -328,7 +338,7 @@
                                                FontSize="15"
                                                Foreground="{StaticResource BrushHeroText}"
                                                Opacity="0.92"
-                                               Text="Manual capture. You decide when each clip starts and stops." />
+                                               Text="Record a workflow, review the captured steps, and export a polished tutorial." />
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
@@ -352,11 +362,7 @@
                         </Border>
                     </StackPanel>
                     <Border Margin="0,16,0,0"
-                            Padding="18"
-                            CornerRadius="10"
-                            Background="#F7FAFF"
-                            BorderBrush="#D7E3FF"
-                            BorderThickness="1">
+                            Style="{StaticResource SubtlePanelStyle}">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock HorizontalAlignment="Center"
                                        FontSize="24"
@@ -385,6 +391,12 @@
                                         ToolTip="Create a shareable step-by-step tutorial."
                                         Style="{StaticResource NextActionButtonStyle}"
                                         Command="{Binding CreatePublishPackageCommand}" />
+                                <Button Margin="12,0,0,0"
+                                        Content="View Tutorial"
+                                        ToolTip="Open the generated tutorial in your default browser."
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Visibility="{Binding CanViewTutorial, Converter={StaticResource BoolToVisibility}}"
+                                        Command="{Binding ViewTutorialCommand}" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -437,9 +449,9 @@
                                         Background="{Binding Workflow.Step4Background}"
                                         BorderBrush="#C7D8FB"
                                         BorderThickness="1">
-                                    <TextBlock FontWeight="SemiBold" Foreground="{Binding Workflow.Step4TextColor}" Text="4. Export Video" />
+                                    <TextBlock FontWeight="SemiBold" Foreground="{Binding Workflow.Step4TextColor}" Text="4. Export Tutorial" />
                                 </Border>
-                                <TextBlock Margin="4,4,0,0" FontSize="12" Foreground="#35528F" Text="Build your final video and export it." />
+                                <TextBlock Margin="4,4,0,0" FontSize="12" Foreground="#35528F" Text="Generate the tutorial, then export a shareable package." />
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -451,7 +463,7 @@
                         Background="#EEF4FF"
                         BorderBrush="#BCD1FF"
                         BorderThickness="1"
-                        Visibility="Visible">
+                        Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -490,7 +502,7 @@
                                     Command="{Binding StopSessionCommand}" />
                             <Button Margin="0,8,0,0"
                                     MinWidth="170"
-                                    Content="Open Clip Editor"
+                                    Content="Review Clips"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Command="{Binding OpenCurationCommand}" />
                             <Button Margin="0,8,0,0"
@@ -503,6 +515,13 @@
                                     ToolTip="Create a shareable step-by-step tutorial."
                                     Style="{StaticResource NextActionButtonStyle}"
                                     Command="{Binding CreatePublishPackageCommand}" />
+                            <Button Margin="0,8,0,0"
+                                    MinWidth="170"
+                                    Content="View Tutorial"
+                                    ToolTip="Open the generated tutorial in your default browser."
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Visibility="{Binding CanViewTutorial, Converter={StaticResource BoolToVisibility}}"
+                                    Command="{Binding ViewTutorialCommand}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -533,16 +552,21 @@
                                       Margin="0,0,8,0"
                                       ItemsSource="{Binding Production.ComposeQualityPresets}"
                                       SelectedItem="{Binding Production.SelectedComposeQualityPreset, UpdateSourceTrigger=PropertyChanged}" />
-                            <Button Content="Open Clip Editor"
+                            <Button Content="Review Clips"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Command="{Binding OpenCurationCommand}" />
                             <Button Margin="8,0,0,0"
                                     Content="Generate Tutorial"
                                     Command="{Binding ComposeManifestCommand}" />
                             <Button Margin="8,0,0,0"
-                                    Content="Open Output Folder"
+                                    Content="Open Tutorial Folder"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Command="{Binding OpenLatestOutputFolderCommand}" />
+                            <Button Margin="8,0,0,0"
+                                    Content="View Tutorial"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Visibility="{Binding CanViewTutorial, Converter={StaticResource BoolToVisibility}}"
+                                    Command="{Binding ViewTutorialCommand}" />
                             <Button Margin="8,0,0,0"
                                     Content="Export Tutorial"
                                     ToolTip="Create a shareable step-by-step tutorial."
@@ -993,7 +1017,7 @@
                         </StackPanel>
                     </Border>
                     </TabItem>
-                    <TabItem Header="Edit + Export">
+                    <TabItem Header="Review + Export">
                     <Border
                             CornerRadius="8"
                             BorderBrush="{StaticResource BrushBorder}"
@@ -1029,7 +1053,22 @@
                             <TextBlock Margin="0,4,0,0"
                                        Foreground="#152D65"
                                        TextWrapping="Wrap"
-                                       Text="{Binding LastRuntimeMessage}" />
+                                       Text="{Binding FriendlyRuntimeMessage}" />
+                            <Border Margin="0,12,0,0"
+                                    Style="{StaticResource SubtlePanelStyle}">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold"
+                                               Foreground="#173C8E"
+                                               Text="Tutorial Status" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Foreground="#35528F"
+                                               Text="{Binding WorkflowStatusText}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="#4D628F"
+                                               TextWrapping="Wrap"
+                                               Text="{Binding NextWorkflowHintText}" />
+                                </StackPanel>
+                            </Border>
                             <Border Margin="0,10,0,0"
                                     Padding="10"
                                     CornerRadius="8"
@@ -1114,7 +1153,7 @@
                                           Margin="0,0,8,0"
                                           ItemsSource="{Binding Production.ExportStylePresets}"
                                           SelectedItem="{Binding Production.SelectedExportStyle, UpdateSourceTrigger=PropertyChanged}" />
-                                    <Button Content="Open Clip Editor"
+                                    <Button Content="Review Clips"
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Command="{Binding OpenCurationCommand}" />
                                     <Button Margin="8,0,0,0"
@@ -1128,9 +1167,15 @@
                                         Content="Export Tutorial"
                                         ToolTip="Create a shareable step-by-step tutorial."
                                         Command="{Binding CreatePublishPackageCommand}" />
+                                <Button Margin="8,0,0,0"
+                                        Content="View Tutorial"
+                                        ToolTip="Open the generated tutorial in your default browser."
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Visibility="{Binding CanViewTutorial, Converter={StaticResource BoolToVisibility}}"
+                                        Command="{Binding ViewTutorialCommand}" />
                             </StackPanel>
                             <Expander Margin="0,14,0,0"
-                                      Header="Clip Editor"
+                                      Header="Review Clips"
                                       IsExpanded="{Binding Curation.IsClipCurationExpanded, Mode=TwoWay}">
                                 <StackPanel Margin="0,8,0,0">
                                         <TextBlock Foreground="#4D628F"
@@ -1260,6 +1305,12 @@
                                                 ToolTip="Create a shareable step-by-step tutorial."
                                                 Command="{Binding CreatePublishPackageCommand}" />
                                         <Button Margin="8,0,0,0"
+                                                Content="View Tutorial"
+                                                ToolTip="Open the generated tutorial in your default browser."
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Visibility="{Binding CanViewTutorial, Converter={StaticResource BoolToVisibility}}"
+                                                Command="{Binding ViewTutorialCommand}" />
+                                        <Button Margin="8,0,0,0"
                                                 Content="Record Narration"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Command="{Binding RecordNarrationCommand}" />
@@ -1378,13 +1429,18 @@
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Command="{Binding CopyShareSummaryCommand}" />
                                         <Button Margin="8,0,0,0"
-                                                Content="Open Compose Health"
+                                                Content="Open Tutorial Diagnostics"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Command="{Binding OpenComposeHealthCommand}" />
                                         <Button Margin="8,0,0,0"
-                                                Content="Open Publish Zip"
+                                                Content="Open Tutorial Package"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Command="{Binding OpenPublishZipCommand}" />
+                                        <Button Margin="8,0,0,0"
+                                                Content="View Tutorial"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Visibility="{Binding CanViewTutorial, Converter={StaticResource BoolToVisibility}}"
+                                                Command="{Binding ViewTutorialCommand}" />
                                     </StackPanel>
                                     <TextBlock Margin="0,4,0,0"
                                                Foreground="#5870A2"

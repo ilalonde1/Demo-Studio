@@ -56,4 +56,32 @@ public sealed class UiGuidanceExperienceTests
             }
         }
     }
+
+    [Fact]
+    public void MainWindow_WithCapturedClips_ShowsRecordingCompleteState()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-ui-guidance-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var viewModel = MainWindowViewModelTestBuilder.CreateMinimal(root);
+            viewModel.CurrentSessionClips.Add(new CurrentSessionClipItem(1, "Clip 1", "00:02", string.Empty, 0, 2) { Order = 1 });
+
+            Assert.Equal("Recording complete", viewModel.WorkflowStatusText);
+
+            typeof(MainWindowViewModel)
+                .GetField("_lastRuntimeMessage", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .SetValue(viewModel, "Recording complete. Review the captured clips, then generate your tutorial.");
+
+            Assert.Contains("Recording complete", viewModel.FriendlyRuntimeMessage, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
 }

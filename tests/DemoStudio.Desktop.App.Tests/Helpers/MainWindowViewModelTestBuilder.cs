@@ -48,6 +48,9 @@ internal static class MainWindowViewModelTestBuilder
         var timelineMarkerWriter = new TimelineMarkerWriter(new LocalFileStorage(root));
         var feedbackNotifier = new RecorderFeedbackNotifier();
         var ffmpegOperationQueue = new DesktopFfmpegOperationQueue();
+        var demoStepSynthesizer = new DesktopDemoStepSynthesizer(root, NullLogger<DesktopDemoStepSynthesizer>.Instance);
+        var demoNarrationGenerator = new DesktopDemoNarrationGenerator(NullLogger<DesktopDemoNarrationGenerator>.Instance);
+        var tutorialExporter = new DesktopTutorialExporter(NullLogger<DesktopTutorialExporter>.Instance);
         var targetingUseCase = new DesktopTargetingUseCase(
             new DesktopWindowCatalogService(),
             launchProfileService,
@@ -82,6 +85,9 @@ internal static class MainWindowViewModelTestBuilder
                 captureRuntime,
                 NullLogger<DesktopPublishWorkflowUseCase>.Instance),
             shellIntegrationUseCase,
+            demoStepSynthesizer,
+            demoNarrationGenerator,
+            tutorialExporter,
             NullLogger<PublishWorkflowViewModel>.Instance);
         var healthMonitorViewModel = new HealthMonitorViewModel(
             new DesktopDependencyHealthService(captureRuntime, processLauncher),

@@ -72,7 +72,7 @@ public sealed partial class MainWindowViewModel
             IsClipCurationExpanded = true;
             await ClearDraftStateAsync();
             _snapshot = _sessionEngine.Reset();
-            _lastRuntimeMessage = reason + " Open Clip Editor to inspect captured clips.";
+            _lastRuntimeMessage = reason + " Open Review Clips to inspect the captured workflow.";
             await RefreshSessionHistoryAsync();
             RaiseWorkflowAndClipState();
         }

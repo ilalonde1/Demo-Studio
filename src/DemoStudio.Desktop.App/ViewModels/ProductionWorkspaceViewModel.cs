@@ -19,6 +19,7 @@ public sealed class ProductionWorkspaceViewModel : INotifyPropertyChanged
     private string _publishStatus = "Publish package not generated.";
     private string _shareSummary = "Share summary not generated yet.";
     private string _lastPublishPackagePath = string.Empty;
+    private string _lastTutorialHtmlPath = string.Empty;
     private string _aiNarrationProvider = "OpenAI";
     private string _aiNarrationBaseUrl = string.Empty;
     private string _aiNarrationModel = "gpt-4o-mini-tts";
@@ -233,6 +234,22 @@ public sealed class ProductionWorkspaceViewModel : INotifyPropertyChanged
         }
     }
 
+    public string LastTutorialHtmlPath
+    {
+        get => _lastTutorialHtmlPath;
+        set
+        {
+            var normalized = value ?? string.Empty;
+            if (_lastTutorialHtmlPath == normalized)
+            {
+                return;
+            }
+
+            _lastTutorialHtmlPath = normalized;
+            OnPropertyChanged();
+        }
+    }
+
     public string AiNarrationProvider
     {
         get => _aiNarrationProvider;
@@ -356,6 +373,7 @@ public sealed class ProductionWorkspaceViewModel : INotifyPropertyChanged
         PublishStatus = "Publish package not generated.";
         ShareSummary = "Share summary not generated yet.";
         LastPublishPackagePath = string.Empty;
+        LastTutorialHtmlPath = string.Empty;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

@@ -26,6 +26,7 @@ public sealed partial class MainWindowViewModel
             {
                 _lastRuntimeMessage = message;
                 OnPropertyChanged(nameof(LastRuntimeMessage));
+                OnPropertyChanged(nameof(FriendlyRuntimeMessage));
             },
             status =>
             {
@@ -41,6 +42,7 @@ public sealed partial class MainWindowViewModel
             {
                 _lastRuntimeMessage = message;
                 OnPropertyChanged(nameof(LastRuntimeMessage));
+                OnPropertyChanged(nameof(FriendlyRuntimeMessage));
             },
             SetRuntimeFailure);
 
@@ -54,12 +56,30 @@ public sealed partial class MainWindowViewModel
         _publishWorkflow.OpenPublishZip(SetRuntimeFailure);
     }
 
+    private void ViewTutorial()
+    {
+        if (!CanViewTutorial)
+        {
+            return;
+        }
+
+        _publishWorkflow.ViewTutorial(
+            message =>
+            {
+                _lastRuntimeMessage = message;
+                OnPropertyChanged(nameof(LastRuntimeMessage));
+                OnPropertyChanged(nameof(FriendlyRuntimeMessage));
+            },
+            SetRuntimeFailure);
+    }
+
     private void OpenComposeHealth()
     {
         if (!CanOpenComposeHealth)
         {
-            _lastRuntimeMessage = "Compose health snapshot not available yet. Build Final Video first.";
+            _lastRuntimeMessage = "Tutorial diagnostics are not available yet. Generate Tutorial first.";
             OnPropertyChanged(nameof(LastRuntimeMessage));
+            OnPropertyChanged(nameof(FriendlyRuntimeMessage));
             return;
         }
 
@@ -69,6 +89,7 @@ public sealed partial class MainWindowViewModel
             {
                 _lastRuntimeMessage = message;
                 OnPropertyChanged(nameof(LastRuntimeMessage));
+                OnPropertyChanged(nameof(FriendlyRuntimeMessage));
             },
             SetRuntimeFailure);
     }

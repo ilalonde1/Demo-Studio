@@ -87,8 +87,8 @@ public sealed class DesktopPublishPackageService
         ZipFile.CreateFromDirectory(packageRoot, zipPath, CompressionLevel.Optimal, includeBaseDirectory: false);
 
         return thumbnailCreated
-            ? DesktopPublishPackageResult.Success(zipPath)
-            : DesktopPublishPackageResult.SuccessWithWarning(zipPath, "Package created, but thumbnail generation was skipped.");
+            ? DesktopPublishPackageResult.Success(zipPath, packageRoot)
+            : DesktopPublishPackageResult.SuccessWithWarning(zipPath, packageRoot, "Package created, but thumbnail generation was skipped.");
     }
 
     private async Task<bool> TryGenerateThumbnailAsync(
@@ -184,14 +184,14 @@ internal static class DesktopPublishTextBuilder
         });
 }
 
-public sealed record DesktopPublishPackageResult(bool Succeeded, string Message, string? PackagePath)
+public sealed record DesktopPublishPackageResult(bool Succeeded, string Message, string? PackagePath, string? PackageDirectoryPath)
 {
-    public static DesktopPublishPackageResult Success(string packagePath)
-        => new(true, $"Publish package created: {packagePath}", packagePath);
+    public static DesktopPublishPackageResult Success(string packagePath, string packageDirectoryPath)
+        => new(true, $"Publish package created: {packagePath}", packagePath, packageDirectoryPath);
 
-    public static DesktopPublishPackageResult SuccessWithWarning(string packagePath, string warning)
-        => new(true, $"Publish package created: {packagePath} ({warning})", packagePath);
+    public static DesktopPublishPackageResult SuccessWithWarning(string packagePath, string packageDirectoryPath, string warning)
+        => new(true, $"Publish package created: {packagePath} ({warning})", packagePath, packageDirectoryPath);
 
     public static DesktopPublishPackageResult Failure(string message)
-        => new(false, message, null);
+        => new(false, message, null, null);
 }

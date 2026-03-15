@@ -220,6 +220,8 @@ public sealed partial class MainWindowViewModel
             if (composeResult.Succeeded && !string.IsNullOrWhiteSpace(composeResult.OutputPath))
             {
                 _lastOutputPath = composeResult.OutputPath!;
+                ComposeStatus = "Tutorial generated. You can now view or export it.";
+                _lastRuntimeMessage = ComposeStatus;
                 OnPropertyChanged(nameof(LastOutputPath));
             }
 

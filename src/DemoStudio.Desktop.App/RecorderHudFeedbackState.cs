@@ -12,6 +12,6 @@ internal sealed class RecorderHudFeedbackState
     public string RegisterStepCapture()
     {
         CurrentStepNumber++;
-        return $"Step captured  (Step {CurrentStepNumber})";
+        return $"Step {CurrentStepNumber} captured";
     }
 }

@@ -272,6 +272,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OpenCurationCommand = new RelayCommand(_ => ExpandClipCuration(), _ => CanOpenCuration);
         OpenLatestOutputFolderCommand = new RelayCommand(_ => OpenLatestOutputFolder(), _ => CanOpenLatestOutputFolder);
         CreatePublishPackageCommand = new RelayCommand(_ => CreatePublishPackageAsync(), _ => CanCreatePublishPackage);
+        ViewTutorialCommand = new RelayCommand(_ => ViewTutorial(), _ => CanViewTutorial);
         SaveDemoTemplateCommand = new RelayCommand(_ => SaveDemoTemplateAsync(), _ => CanSaveDemoTemplate);
         ApplyDemoTemplateCommand = new RelayCommand(_ => ApplySelectedTemplateAsync(), _ => CanApplyDemoTemplate);
         DeleteDemoTemplateCommand = new RelayCommand(_ => DeleteSelectedTemplateAsync(), _ => CanDeleteDemoTemplate);
@@ -317,6 +318,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             OpenCurationCommand,
             OpenLatestOutputFolderCommand,
             CreatePublishPackageCommand,
+            ViewTutorialCommand,
             SaveDemoTemplateCommand,
             ApplyDemoTemplateCommand,
             DeleteDemoTemplateCommand,
@@ -384,6 +386,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     public ICommand OpenLatestOutputFolderCommand { get; private set; } = null!;
 
     public ICommand CreatePublishPackageCommand { get; private set; } = null!;
+
+    public ICommand ViewTutorialCommand { get; private set; } = null!;
 
     public ICommand SaveDemoTemplateCommand { get; private set; } = null!;
     public ICommand ApplyDemoTemplateCommand { get; private set; } = null!;
@@ -911,6 +915,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     }
     public bool CanCopyShareSummary => !_isBusy && !string.IsNullOrWhiteSpace(_publishWorkflow.ShareSummary);
     public bool CanOpenPublishZip => !_isBusy && !string.IsNullOrWhiteSpace(_publishWorkflow.LastPublishPackagePath) && File.Exists(_publishWorkflow.LastPublishPackagePath);
+    public bool CanViewTutorial => !_isBusy && !string.IsNullOrWhiteSpace(_publishWorkflow.LastTutorialHtmlPath) && File.Exists(_publishWorkflow.LastTutorialHtmlPath);
     public bool CanOpenComposeHealth => !_isBusy && File.Exists(GetComposeHealthPath());
     public bool IsOnboardingVisible => _onboarding.IsVisible;
     public TargetingLaunchViewModel Targeting => _targeting;
@@ -1069,6 +1074,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(ShareSummary));
         OnPropertyChanged(nameof(CanCopyShareSummary));
         OnPropertyChanged(nameof(CanOpenPublishZip));
+        OnPropertyChanged(nameof(CanViewTutorial));
         OnPropertyChanged(nameof(CanOpenComposeHealth));
         OnPropertyChanged(nameof(MemoryWorkingSetText));
         OnPropertyChanged(nameof(MemoryPrivateText));
@@ -1213,6 +1219,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(ShareSummary));
         OnPropertyChanged(nameof(CanCopyShareSummary));
         OnPropertyChanged(nameof(CanOpenPublishZip));
+        OnPropertyChanged(nameof(CanViewTutorial));
         OnPropertyChanged(nameof(CanOpenComposeHealth));
         OnPropertyChanged(nameof(IsOnboardingVisible));
         OnPropertyChanged(nameof(OnboardingStepNumber));
@@ -1281,6 +1288,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(ShareSummary));
         OnPropertyChanged(nameof(CanCopyShareSummary));
         OnPropertyChanged(nameof(CanOpenPublishZip));
+        OnPropertyChanged(nameof(CanViewTutorial));
         OnPropertyChanged(nameof(CanOpenComposeHealth));
         RaiseCommandState();
     }
@@ -1336,6 +1344,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         OnPropertyChanged(nameof(ShareSummary));
         OnPropertyChanged(nameof(CanCopyShareSummary));
         OnPropertyChanged(nameof(CanOpenPublishZip));
+        OnPropertyChanged(nameof(CanViewTutorial));
         OnPropertyChanged(nameof(CanOpenComposeHealth));
         OnPropertyChanged(nameof(WorkflowStatusText));
         OnPropertyChanged(nameof(ShouldHighlightExportTutorial));
@@ -1412,8 +1421,8 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
             RecorderSessionState.Completed when CanCreatePublishPackage => "Tutorial ready",
             RecorderSessionState.Completed => "Generating tutorial",
             RecorderSessionState.Failed => "Action needs attention",
-            _ when CurrentSessionClips.Count > 0 && CanComposeManifest => "Ready to generate tutorial",
-            _ when CurrentSessionClips.Count > 0 => "Recording finished",
+            _ when CurrentSessionClips.Count > 0 && CanComposeManifest => "Recording complete",
+            _ when CurrentSessionClips.Count > 0 => "Recording complete",
             _ => "Ready to record"
         };
     }
@@ -1469,6 +1478,17 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         if (_lastRuntimeMessage.Contains("Stop session failed", StringComparison.OrdinalIgnoreCase))
         {
             return "Recording could not finish cleanly. Try finishing the recording again.";
+        }
+
+        if (_lastRuntimeMessage.Contains("Tutorial generated", StringComparison.OrdinalIgnoreCase)
+            || _lastRuntimeMessage.Contains("tutorial ready", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Tutorial generated. You can now view or export it.";
+        }
+
+        if (_lastRuntimeMessage.Contains("Recording complete", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Recording complete. Review the captured clips, then generate or export your tutorial.";
         }
 
         return _lastRuntimeMessage;

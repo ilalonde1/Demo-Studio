@@ -113,7 +113,7 @@ public sealed class WorkflowStateViewModel : INotifyPropertyChanged
             RecorderSessionState.Armed => "Choose what to capture, then click Record Demo to begin.",
             RecorderSessionState.Recording => "Recording in progress. Use Pause Recording to split clips or Finish Recording when you are done.",
             RecorderSessionState.Paused => "Recording paused. Click Record Demo to resume or Finish Recording to create your tutorial steps.",
-            RecorderSessionState.Completed => "Recording finished. Generate your tutorial video, then export the tutorial package.",
+            RecorderSessionState.Completed => "Recording complete. Generate your tutorial, then export the tutorial package.",
             RecorderSessionState.Failed => $"Recording needs attention: {failureReason}",
             _ => "Unknown state."
         };
