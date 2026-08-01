@@ -8,6 +8,7 @@ namespace DemoStudio.Desktop.App.ViewModels;
 public sealed partial class MainWindowViewModel
 {
     private const string DefaultStageAddress = "https://www.bing.com";
+    private const string StageWorkspaceWindowTitle = "DemoStudio Stage Workspace";
     private StageWorkspaceWindow? _stageWorkspaceWindow;
     private string _stageStartupUrl = DefaultStageAddress;
 
@@ -49,6 +50,11 @@ public sealed partial class MainWindowViewModel
         if (IsStageMode)
         {
             _ = EnsureStageWorkspaceReadyAsync(bringToFront: false);
+        }
+        else if (IsStageWorkspaceTarget())
+        {
+            ClearStageWindowTargetFields("Select a target window, Stage Workspace, or desktop capture to begin.");
+            RefreshWindowCandidates();
         }
     }
 
@@ -130,12 +136,7 @@ public sealed partial class MainWindowViewModel
         _stageWorkspaceWindow = null;
         if (IsStageMode)
         {
-            WindowHandleHex = string.Empty;
-            WindowProcessName = string.Empty;
-            WindowTitleContains = string.Empty;
-            WindowSelectionStatus = "Stage workspace closed. Open Stage Workspace before recording.";
-            OnPropertyChanged(nameof(WindowSelectionStatus));
-            RaiseTargetingAndLaunchState();
+            ClearStageWindowTargetFields("Stage workspace closed. Open Stage Workspace before recording.");
         }
     }
 
@@ -144,10 +145,27 @@ public sealed partial class MainWindowViewModel
         var handleHex = $"0x{handle.ToInt64():X}";
         WindowHandleHex = handleHex;
         WindowProcessName = Process.GetCurrentProcess().ProcessName;
-        WindowTitleContains = _stageWorkspaceWindow?.Title ?? "DemoStudio Stage Workspace";
+        WindowTitleContains = _stageWorkspaceWindow?.Title ?? StageWorkspaceWindowTitle;
         SelectedWindowCandidate = null;
         WindowSelectionStatus = $"Stage workspace locked ({handleHex}).";
         OnPropertyChanged(nameof(WindowSelectionStatus));
+    }
+
+    private bool IsStageWorkspaceTarget()
+    {
+        return string.Equals(WindowTitleContains, StageWorkspaceWindowTitle, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(WindowProcessName, Process.GetCurrentProcess().ProcessName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ClearStageWindowTargetFields(string status)
+    {
+        WindowHandleHex = string.Empty;
+        WindowProcessName = string.Empty;
+        WindowTitleContains = string.Empty;
+        SelectedWindowCandidate = null;
+        WindowSelectionStatus = status;
+        OnPropertyChanged(nameof(WindowSelectionStatus));
+        RaiseTargetingAndLaunchState();
     }
 
     private Task CloseStageWorkspaceAsync()

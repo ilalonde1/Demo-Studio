@@ -105,7 +105,8 @@ internal static class FfmpegCommandBuilder
         arguments.Add(options.Preset);
         arguments.Add("-crf");
         arguments.Add(options.Crf.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        arguments.Add("-pix_fmt yuv420p");
+        arguments.Add("-pix_fmt");
+        arguments.Add("yuv420p");
         arguments.Add(outputPath);
 
         return arguments;

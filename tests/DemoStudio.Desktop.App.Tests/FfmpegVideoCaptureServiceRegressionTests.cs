@@ -123,6 +123,59 @@ public sealed class FfmpegVideoCaptureServiceRegressionTests
         }
     }
 
+    [Fact]
+    public async Task StartAsync_UsesSeparatePixFmtArguments()
+    {
+        var launcher = new FakeProcessLauncher(
+            new FakeProcessHandle(new ProcessExecutionResult(0, string.Empty, string.Empty, TimedOut: false, Cancelled: false)));
+        var storage = new FakeFileStorage();
+        var locator = new FakeWindowLocator(new WindowLocatorResult(
+            Found: true,
+            Handle: new IntPtr(0x3F0566),
+            Title: "Edge",
+            ProcessId: 1234,
+            FailureReason: null,
+            Bounds: new WindowBounds(0, 0, 1280, 720),
+            DesktopBounds: new WindowBounds(0, 0, 1920, 1080)));
+        var options = Options.Create(new FfmpegCaptureOptions
+        {
+            Enabled = true,
+            FfmpegPath = "ffmpeg",
+            CaptureMode = "Window",
+            WindowHandleHex = "0x3F0566",
+            PreferExactHandle = true,
+            OutputFileExtension = ".mp4",
+            CaptureMicrophone = false
+        });
+
+        var service = new FfmpegVideoCaptureService(launcher, storage, locator, options, NullLogger<FfmpegVideoCaptureService>.Instance);
+        var run = new DemoRun(Guid.NewGuid(), Guid.NewGuid(), "tester@demostudio.local");
+        var outputDir = Path.Combine(Path.GetTempPath(), "demostudio-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDir);
+        var rawPath = Path.Combine(outputDir, "capture.mp4");
+
+        try
+        {
+            var start = await service.StartAsync(new CaptureStartRequest(run, outputDir, rawPath));
+
+            Assert.True(start.Succeeded);
+            Assert.NotNull(launcher.LastStartRequest);
+            var args = launcher.LastStartRequest!.ArgumentList!.ToArray();
+            var pixFmtIndex = Array.IndexOf(args, "-pix_fmt");
+            Assert.True(pixFmtIndex >= 0);
+            Assert.True(pixFmtIndex < args.Length - 1);
+            Assert.Equal("yuv420p", args[pixFmtIndex + 1]);
+            Assert.DoesNotContain("-pix_fmt yuv420p", args);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDir))
+            {
+                Directory.Delete(outputDir, true);
+            }
+        }
+    }
+
     private sealed class FakeProcessLauncher : IProcessLauncher
     {
         private readonly IProcessHandle _handle;

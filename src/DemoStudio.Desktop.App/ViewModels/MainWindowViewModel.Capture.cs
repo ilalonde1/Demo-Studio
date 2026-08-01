@@ -56,7 +56,7 @@ public sealed partial class MainWindowViewModel
                         message =>
                         {
                             _lastRuntimeMessage = message;
-                            OnPropertyChanged(nameof(LastRuntimeMessage));
+                            RefreshRuntimeStatusMessage();
                         },
                         cancellationToken),
                     RunStartCountdownAsync,
@@ -87,12 +87,12 @@ public sealed partial class MainWindowViewModel
             if (!string.IsNullOrWhiteSpace(result.RuntimeMessage))
             {
                 _lastRuntimeMessage = result.RuntimeMessage;
-                OnPropertyChanged(nameof(LastRuntimeMessage));
+                RefreshRuntimeStatusMessage();
             }
             else if (_captureSession.IsStartCancellationRequested)
             {
                 _lastRuntimeMessage = "Recording start cancelled.";
-                OnPropertyChanged(nameof(LastRuntimeMessage));
+                RefreshRuntimeStatusMessage();
             }
         }
         catch (Exception ex)
@@ -176,7 +176,7 @@ public sealed partial class MainWindowViewModel
         {
             _captureSession.CancelPendingStart();
             _lastRuntimeMessage = "Cancelling recording start...";
-            OnPropertyChanged(nameof(LastRuntimeMessage));
+            RefreshRuntimeStatusMessage();
             return;
         }
 
@@ -214,6 +214,10 @@ public sealed partial class MainWindowViewModel
             {
                 RaiseWorkflowAndClipState();
             }
+            else
+            {
+                RefreshRuntimeStatusMessage();
+            }
         }
         catch (Exception ex)
         {
@@ -237,7 +241,7 @@ public sealed partial class MainWindowViewModel
             message =>
             {
                 _lastRuntimeMessage = message;
-                OnPropertyChanged(nameof(LastRuntimeMessage));
+                RefreshRuntimeStatusMessage();
             });
     }
 

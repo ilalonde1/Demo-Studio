@@ -154,6 +154,15 @@ public sealed partial class MainWindowViewModel
         var stopwatch = Stopwatch.StartNew();
         try
         {
+            if (ShouldSkipWindowPreflight())
+            {
+                PreflightStatus = "Setup check not run yet.";
+                _lastRuntimeMessage = "Select a target window, Stage Workspace, or desktop capture to begin.";
+                OnPropertyChanged(nameof(PreflightStatus));
+                OnPropertyChanged(nameof(LastRuntimeMessage));
+                return;
+            }
+
             var result = await _preflightChecksUseCase.RunAsync(
                 new DesktopPreflightChecksRequest(
                     IsStageMode,
@@ -171,6 +180,19 @@ public sealed partial class MainWindowViewModel
         {
             RecordOperationMetric("Preflight", stopwatch.Elapsed);
         }
+    }
+
+    private bool ShouldSkipWindowPreflight()
+    {
+        if (!IsWindowMode)
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(WindowHandleHex)
+            && string.IsNullOrWhiteSpace(WindowTitleContains)
+            && string.IsNullOrWhiteSpace(WindowProcessName)
+            && SelectedWindowCandidate is null;
     }
 
     private Task<DesktopPreflightReport> BuildAndRunPreflightAsync()

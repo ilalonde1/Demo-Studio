@@ -63,6 +63,9 @@ public sealed partial class MainWindowViewModel
         // Never silently retarget while a handle lock exists. Force explicit re-selection.
         if (!string.IsNullOrWhiteSpace(lockedHandle) && matchedLocked is null)
         {
+            WindowHandleHex = string.Empty;
+            WindowTitleContains = string.Empty;
+            WindowProcessName = string.Empty;
             SelectedWindowCandidate = null;
             WindowSelectionStatus = windows.Count == 0
                 ? "Locked target is unavailable. No capturable windows found."
@@ -70,7 +73,16 @@ public sealed partial class MainWindowViewModel
         }
         else
         {
-            SelectedWindowCandidate = matchedPrior ?? matchedLocked ?? WindowCandidates.FirstOrDefault();
+            _suppressAutoLockFromWindowSelection = true;
+            try
+            {
+                SelectedWindowCandidate = matchedPrior ?? matchedLocked ?? WindowCandidates.FirstOrDefault();
+            }
+            finally
+            {
+                _suppressAutoLockFromWindowSelection = false;
+            }
+
             WindowSelectionStatus = windows.Count == 0
                 ? "No capturable windows found."
                 : SelectedWindowCandidate is null

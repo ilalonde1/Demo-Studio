@@ -84,4 +84,171 @@ public sealed class UiGuidanceExperienceTests
             }
         }
     }
+
+    [Fact]
+    public void MainWindow_RefreshClearsUnavailableLockedWindow()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-ui-guidance-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var viewModel = MainWindowViewModelTestBuilder.CreateMinimal(root);
+            viewModel.CaptureMode = "Window";
+            viewModel.WindowHandleHex = "0xDEADBEEF";
+            viewModel.WindowTitleContains = "Stale Window";
+            viewModel.WindowProcessName = "stale-process";
+
+            typeof(MainWindowViewModel)
+                .GetMethod("RefreshWindowCandidates", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(viewModel, null);
+
+            Assert.Equal(string.Empty, viewModel.WindowHandleHex);
+            Assert.Equal(string.Empty, viewModel.WindowTitleContains);
+            Assert.Equal(string.Empty, viewModel.WindowProcessName);
+            Assert.Null(viewModel.SelectedWindowCandidate);
+            Assert.False(viewModel.CanStartClip);
+            Assert.Contains("Locked target", viewModel.WindowSelectionStatus, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task MainWindow_PreflightWithoutTargetRemainsNeutral()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-ui-guidance-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var viewModel = MainWindowViewModelTestBuilder.CreateMinimal(root);
+            viewModel.CaptureMode = "Window";
+            viewModel.WindowHandleHex = string.Empty;
+            viewModel.WindowTitleContains = string.Empty;
+            viewModel.WindowProcessName = string.Empty;
+            viewModel.SelectedWindowCandidate = null;
+
+            var task = (Task)typeof(MainWindowViewModel)
+                .GetMethod("RunPreflightAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(viewModel, null)!;
+            await task;
+
+            Assert.Equal("Setup check not run yet.", viewModel.PreflightStatus);
+            Assert.Equal("Select a target window, Stage Workspace, or desktop capture to begin.", viewModel.LastRuntimeMessage);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void MainWindow_RefreshSelectionDoesNotAutoLockWindowHandle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-ui-guidance-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var viewModel = MainWindowViewModelTestBuilder.CreateMinimal(root);
+
+            typeof(MainWindowViewModel)
+                .GetMethod("RefreshWindowCandidates", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(viewModel, null);
+
+            Assert.Equal(string.Empty, viewModel.WindowHandleHex);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void MainWindow_SwitchingFromStageToWindow_ClearsStageTargetFields()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "demostudio-ui-guidance-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var viewModel = MainWindowViewModelTestBuilder.CreateMinimal(root);
+            viewModel.CaptureMode = "Stage";
+            viewModel.WindowHandleHex = "0x12345";
+            viewModel.WindowProcessName = "DemoStudio.Desktop.App";
+            viewModel.WindowTitleContains = "DemoStudio Stage Workspace";
+
+            viewModel.CaptureMode = "Window";
+
+            Assert.Equal(string.Empty, viewModel.WindowHandleHex);
+            Assert.Equal(string.Empty, viewModel.WindowProcessName);
+            Assert.Equal(string.Empty, viewModel.WindowTitleContains);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void CaptureFlow_RefreshesFriendlyRuntimeMessageAfterCountdown()
+    {
+        var solutionRoot = FindSolutionRoot();
+        var captureViewModelPath = Path.Combine(solutionRoot, "src", "DemoStudio.Desktop.App", "ViewModels", "MainWindowViewModel.Capture.cs");
+        var captureViewModel = File.ReadAllText(captureViewModelPath);
+
+        Assert.Contains("RefreshRuntimeStatusMessage();", captureViewModel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecorderHud_StartsExpandedSoPauseAndStopAreVisible()
+    {
+        var solutionRoot = FindSolutionRoot();
+        var hudCodeBehindPath = Path.Combine(solutionRoot, "src", "DemoStudio.Desktop.App", "RecorderHudWindow.xaml.cs");
+        var hudCodeBehind = File.ReadAllText(hudCodeBehindPath);
+
+        Assert.Contains("_isCompactMode = false;", hudCodeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowCapture_DefaultsUsePaddedCropForContext()
+    {
+        var solutionRoot = FindSolutionRoot();
+        var appSettingsPath = Path.Combine(solutionRoot, "src", "DemoStudio.Desktop.App", "appsettings.json");
+        var appSettings = File.ReadAllText(appSettingsPath);
+
+        Assert.Contains("\"CropEnabled\": true", appSettings, StringComparison.Ordinal);
+        Assert.Contains("\"CropPaddingPixels\": 48", appSettings, StringComparison.Ordinal);
+    }
+
+    private static string FindSolutionRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "DemoStudio.Desktop.sln")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
+    }
 }

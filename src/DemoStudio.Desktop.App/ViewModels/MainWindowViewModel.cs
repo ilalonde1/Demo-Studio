@@ -67,6 +67,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private bool _isInitialized;
     private bool _isDisposed;
     private bool _isShutdownInProgress;
+    private bool _suppressAutoLockFromWindowSelection;
 
     private string _lastOutputPath
     {
@@ -651,7 +652,7 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
         set
         {
             _targeting.SelectedWindowCandidate = value;
-            if (CanEditTargetSettings && value is not null)
+            if (!_suppressAutoLockFromWindowSelection && CanEditTargetSettings && value is not null)
             {
                 EnsureWindowTargetLockedFromSelection();
             }
@@ -1400,6 +1401,14 @@ public sealed partial class MainWindowViewModel : INotifyPropertyChanged, IDispo
     private void RaiseCommandState()
     {
         _commandState.RaiseCanExecuteChanged();
+    }
+
+    private void RefreshRuntimeStatusMessage()
+    {
+        OnPropertyChanged(nameof(LastRuntimeMessage));
+        OnPropertyChanged(nameof(FriendlyRuntimeMessage));
+        OnPropertyChanged(nameof(WorkflowStatusText));
+        OnPropertyChanged(nameof(NextWorkflowHintText));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

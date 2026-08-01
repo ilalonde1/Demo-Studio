@@ -32,9 +32,9 @@ public sealed class FfmpegCaptureOptions
 
     public bool FallbackToDesktop { get; set; } = false;
 
-    public bool CropEnabled { get; set; } = false;
+    public bool CropEnabled { get; set; } = true;
 
-    public int CropPaddingPixels { get; set; } = 8;
+    public int CropPaddingPixels { get; set; } = 48;
 
     public bool HighlightCursor { get; set; } = false;
 

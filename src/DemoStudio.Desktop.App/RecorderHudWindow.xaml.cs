@@ -18,7 +18,7 @@ public partial class RecorderHudWindow : Window, INotifyPropertyChanged
     private HwndSource? _hwndSource;
     private bool _manualPositionOverride;
     private bool _isApplyingSnapPosition;
-    private bool _isCompactMode = true;
+    private bool _isCompactMode = false;
     private IRecorderFeedbackNotifier? _feedbackNotifier;
     private const int HotkeyIdStartResume = 1001;
     private const int HotkeyIdPause = 1002;

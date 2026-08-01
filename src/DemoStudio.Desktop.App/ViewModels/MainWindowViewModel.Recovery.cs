@@ -68,7 +68,10 @@ public sealed partial class MainWindowViewModel
 
         var draft = restore.Draft;
         CaptureMode = draft.CaptureMode;
-        WindowTitleContains = draft.WindowTitleContains;
+        WindowTitleContains = string.Equals(draft.WindowTitleContains, "DemoStudio Stage Workspace", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(draft.CaptureMode, "Stage", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : draft.WindowTitleContains;
         CaptureNarration = draft.CaptureNarration;
         MicrophoneDeviceName = draft.MicrophoneDeviceName;
         SelectedComposeQualityPreset = draft.QualityPreset;

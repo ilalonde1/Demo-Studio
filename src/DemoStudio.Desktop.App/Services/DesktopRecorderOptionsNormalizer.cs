@@ -72,8 +72,8 @@ internal static class DesktopRecorderOptionsNormalizer
             OutputFileExtension = ".mp4",
             CaptureMode = "Window",
             FallbackToDesktop = false,
-            CropEnabled = false,
-            CropPaddingPixels = 8,
+            CropEnabled = true,
+            CropPaddingPixels = 48,
             HighlightCursor = false
         };
     }

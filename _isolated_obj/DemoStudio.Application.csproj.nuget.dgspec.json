@@ -1,0 +1,359 @@
+{
+  "format": 1,
+  "restore": {
+    "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Application\\DemoStudio.Application.csproj": {}
+  },
+  "projects": {
+    "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Application\\DemoStudio.Application.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Application\\DemoStudio.Application.csproj",
+        "projectName": "DemoStudio.Application",
+        "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Application\\DemoStudio.Application.csproj",
+        "packagesPath": "C:\\Users\\ilalonde\\.nuget\\packages\\",
+        "outputPath": "C:\\VIsual Studio Projects\\App Demo Maker\\_isolated_obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\ilalonde\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Automation.Abstractions\\DemoStudio.Automation.Abstractions.csproj": {
+                "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Automation.Abstractions\\DemoStudio.Automation.Abstractions.csproj"
+              },
+              "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Capture.Abstractions\\DemoStudio.Capture.Abstractions.csproj": {
+                "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Capture.Abstractions\\DemoStudio.Capture.Abstractions.csproj"
+              },
+              "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj": {
+                "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj"
+              },
+              "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Redaction.Abstractions\\DemoStudio.Redaction.Abstractions.csproj": {
+                "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Redaction.Abstractions\\DemoStudio.Redaction.Abstractions.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.419/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Automation.Abstractions\\DemoStudio.Automation.Abstractions.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Automation.Abstractions\\DemoStudio.Automation.Abstractions.csproj",
+        "projectName": "DemoStudio.Automation.Abstractions",
+        "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Automation.Abstractions\\DemoStudio.Automation.Abstractions.csproj",
+        "packagesPath": "C:\\Users\\ilalonde\\.nuget\\packages\\",
+        "outputPath": "C:\\VIsual Studio Projects\\App Demo Maker\\_isolated_obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\ilalonde\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj": {
+                "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.419/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Capture.Abstractions\\DemoStudio.Capture.Abstractions.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Capture.Abstractions\\DemoStudio.Capture.Abstractions.csproj",
+        "projectName": "DemoStudio.Capture.Abstractions",
+        "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Capture.Abstractions\\DemoStudio.Capture.Abstractions.csproj",
+        "packagesPath": "C:\\Users\\ilalonde\\.nuget\\packages\\",
+        "outputPath": "C:\\VIsual Studio Projects\\App Demo Maker\\_isolated_obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\ilalonde\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj": {
+                "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.419/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj",
+        "projectName": "DemoStudio.Domain",
+        "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj",
+        "packagesPath": "C:\\Users\\ilalonde\\.nuget\\packages\\",
+        "outputPath": "C:\\VIsual Studio Projects\\App Demo Maker\\_isolated_obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\ilalonde\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.419/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Redaction.Abstractions\\DemoStudio.Redaction.Abstractions.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Redaction.Abstractions\\DemoStudio.Redaction.Abstractions.csproj",
+        "projectName": "DemoStudio.Redaction.Abstractions",
+        "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Redaction.Abstractions\\DemoStudio.Redaction.Abstractions.csproj",
+        "packagesPath": "C:\\Users\\ilalonde\\.nuget\\packages\\",
+        "outputPath": "C:\\VIsual Studio Projects\\App Demo Maker\\_isolated_obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\ilalonde\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj": {
+                "projectPath": "C:\\VIsual Studio Projects\\App Demo Maker\\src\\DemoStudio.Domain\\DemoStudio.Domain.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.419/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
