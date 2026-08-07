@@ -26,6 +26,7 @@ var trendStartAt = GetInt(argsMap, "--trend-start", Math.Max(10, iterations / 5)
 var maxWorkingSetSlopeMbPerIteration = GetDouble(argsMap, "--max-working-set-slope", 0.05d, 0d, 10d);
 var maxPrivateSlopeMbPerIteration = GetDouble(argsMap, "--max-private-slope", 0.03d, 0d, 10d);
 var maxHandleSlopePerIteration = GetDouble(argsMap, "--max-handle-slope", 0.5d, 0d, 500d);
+var ffmpegLeakGraceSeconds = GetInt(argsMap, "--ffmpeg-leak-grace-seconds", 2, 0, 30);
 var captureMode = argsMap.TryGetValue("--mode", out var modeArg) && modeArg.Equals("Window", StringComparison.OrdinalIgnoreCase)
     ? "Window"
     : "Desktop";
@@ -259,6 +260,13 @@ overallStopwatch.Stop();
 var passed = runMetrics.Count(x => string.Equals(x.Status, "Passed", StringComparison.OrdinalIgnoreCase));
 var failed = runMetrics.Count - passed;
 var ffmpegLeftovers = runMetrics.Where(x => x.FfmpegProcessCountAfter > 0).ToArray();
+if (ffmpegLeakGraceSeconds > 0)
+{
+    await Task.Delay(TimeSpan.FromSeconds(ffmpegLeakGraceSeconds));
+}
+
+var finalFfmpegProcessCount = CountFfmpegProcesses();
+var hasFfmpegLeak = finalFfmpegProcessCount > 0;
 
 var trendSlice = runMetrics.Where(x => x.Iteration >= trendStartAt).ToArray();
 var workingSetSlope = ComputeSlope(trendSlice.Select(x => (double)x.Iteration).ToArray(), trendSlice.Select(x => x.WorkingSetMb).ToArray());
@@ -294,7 +302,9 @@ var summary = new SmokeSoakSummary(
     MaxWorkingSetMb: runMetrics.Count == 0 ? 0d : runMetrics.Max(x => x.WorkingSetMb),
     MaxPrivateMb: runMetrics.Count == 0 ? 0d : runMetrics.Max(x => x.PrivateMb),
     MaxHandleCount: runMetrics.Count == 0 ? 0 : runMetrics.Max(x => x.HandleCount),
-    AnyFfmpegLeftover: ffmpegLeftovers.Length > 0,
+    AnyFfmpegLeftover: hasFfmpegLeak,
+    FinalFfmpegProcessCount: finalFfmpegProcessCount,
+    IterationsWithFfmpegOverlap: ffmpegLeftovers.Length,
     TrendStartIteration: trendStartAt,
     WorkingSetSlopeMbPerIteration: workingSetSlope,
     PrivateSlopeMbPerIteration: privateSlope,
@@ -311,7 +321,10 @@ await File.WriteAllTextAsync(
     JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
 
 Console.WriteLine($"[soak] Summary metrics={resolvedMetricsPath}");
-Console.WriteLine($"[soak] COMPLETE passed={passed} failed={failed} ffmpegLeftover={summary.AnyFfmpegLeftover} wsSlope={workingSetSlope:0.###} privSlope={privateSlope:0.###} handleSlope={handleSlope:0.###}");
+Console.WriteLine(
+    $"[soak] COMPLETE passed={passed} failed={failed} ffmpegLeftover={summary.AnyFfmpegLeftover} " +
+    $"ffmpegFinal={summary.FinalFfmpegProcessCount} ffmpegOverlapIters={summary.IterationsWithFfmpegOverlap} " +
+    $"wsSlope={workingSetSlope:0.###} privSlope={privateSlope:0.###} handleSlope={handleSlope:0.###}");
 
 if (failed > 0 || summary.AnyFfmpegLeftover || slopeBreaches.Count > 0)
 {
@@ -469,6 +482,8 @@ internal sealed record SmokeSoakSummary(
     double MaxPrivateMb,
     int MaxHandleCount,
     bool AnyFfmpegLeftover,
+    int FinalFfmpegProcessCount,
+    int IterationsWithFfmpegOverlap,
     int TrendStartIteration,
     double WorkingSetSlopeMbPerIteration,
     double PrivateSlopeMbPerIteration,
