@@ -185,6 +185,12 @@
             "command": "python -I \"C:/VIsual Studio Projects/Framework/tools/board_render.py\" --board personal --owner \"App Demo Maker\"",
             "timeout": 200,
             "statusMessage": "Reading this lead's rows off the personal board"
+          },
+          {
+            "type": "command",
+            "command": "python -I \"C:/VIsual Studio Projects/Framework/tools/kor_brain.py\" --db personal render --lane \"App Demo Maker\"",
+            "timeout": 200,
+            "statusMessage": "Reading this lead's memory and resume state from the personal DB (F7)"
           }
         ]
       }

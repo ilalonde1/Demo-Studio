@@ -16,3 +16,11 @@ Update the STATE NOW block of `docs/HANDOVER.md`, every time read off `date`.
 
 ## Rules (the personal group)
 @C:/VIsual\ Studio\ Projects/PersonalFramework/RULES.md
+
+## Memory lives in the DB (Framework F7, 2 Nov 2026)
+Your memory is PersonalBoard `brain`, lane "App Demo Maker", loaded into every session at start (the "YOUR MEMORY" block).
+Write a memory: `python -I "C:\VIsual Studio Projects\Framework\tools\kor_brain.py" --db personal note --lane "App Demo Maker"
+--name <slug> --kind <user|feedback|project|reference> --description "<one line>" --body-file <file>`. Retire one:
+`... --db personal retire --lane "App Demo Maker" --name <slug> --because "<why>"`. Keep your resume block: `... --db personal
+state --lane "App Demo Maker" --file <file>`. Search: `... --db personal search <term> --lane "App Demo Maker"`. The file memory folder is
+a READ-ONLY fallback, frozen at the import on 2 Nov 2026: do not write new memory files.
