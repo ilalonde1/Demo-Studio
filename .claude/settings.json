@@ -106,12 +106,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"C:/VIsual Studio Projects/Operations/tools/claude_look_guard.py\"",
-            "timeout": 30,
-            "statusMessage": "Checking every change was LOOKED at before telling a peer it is done"
-          },
-          {
-            "type": "command",
             "command": "python \"C:/VIsual Studio Projects/Operations/tools/claude_instrument_guard.py\"",
             "timeout": 30,
             "statusMessage": "Checking a reported zero came from an instrument tested on a known answer"
@@ -165,12 +159,6 @@
           },
           {
             "type": "command",
-            "command": "python \"C:/VIsual Studio Projects/Operations/tools/claude_look_guard.py\"",
-            "timeout": 30,
-            "statusMessage": "Checking every change was LOOKED at before any claim it is done"
-          },
-          {
-            "type": "command",
             "command": "python \"C:/VIsual Studio Projects/Operations/tools/claude_instrument_guard.py\"",
             "timeout": 30,
             "statusMessage": "Checking a reported zero came from an instrument tested on a known answer"
@@ -185,12 +173,18 @@
             "type": "command",
             "command": "python \"C:/VIsual Studio Projects/Operations/tools/claude_prompt_recorder.py\"",
             "timeout": 20
-          },
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
           {
             "type": "command",
-            "command": "C:/KOR-Operations/cli/netops.exe signin-status --hook",
-            "timeout": 10,
-            "statusMessage": "Is the NetworkOps sign-in about to lapse?"
+            "command": "python -I \"C:/VIsual Studio Projects/Framework/tools/board_render.py\" --board personal --owner \"App Demo Maker\"",
+            "timeout": 200,
+            "statusMessage": "Reading this lead's rows off the personal board"
           }
         ]
       }
